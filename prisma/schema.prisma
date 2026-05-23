@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum ConversationStatus {
+  ACTIVE
+  CANCELLED
+  ARCHIVED
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+}
+
+enum InferenceStatus {
+  SUCCESS
+  ERROR
+}
+
+model User {
+  id           String         @id @default(cuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  role         UserRole       @default(MEMBER)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     Session[]
+  conversations Conversation[]
+  inferenceLogs InferenceLog[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Conversation {
+  id        String             @id @default(cuid())
+  userId    String
+  title     String?
+  provider  String             @default("Claude")
+  model     String             @default("ClaudeSonnet45")
+  status    ConversationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id])
+  messages  Message[]
+  logs      InferenceLog[]
+
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  logs           InferenceLog[]
+
+  @@index([conversationId, createdAt])
+}
+
+model Provider {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  models    Model[]
+}
+
+model Model {
+  id         String   @id @default(cuid())
+  providerId String
+  name       String
+  contextWindow Int
+  isActive   Boolean @default(true)
+  provider   Provider @relation(fields: [providerId], references: [id])
+
+  @@unique([providerId, name])
+}
+
+model InferenceLog {
+  id                  String          @id @default(cuid())
+  requestId           String          @unique
+  userId              String
+  conversationId      String
+  messageId           String?
+  provider            String
+  model               String
+  status              InferenceStatus
+  latencyMs           Int
+  timeToFirstTokenMs  Int?
+  promptTokens        Int             @default(0)
+  completionTokens    Int             @default(0)
+  totalTokens         Int             @default(0)
+  inputPreview        String
+  outputPreview       String?
+  errorCode           String?
+  errorMessage        String?
+  createdAt           DateTime        @default(now())
+  user                User            @relation(fields: [userId], references: [id])
+  conversation        Conversation    @relation(fields: [conversationId], references: [id])
+  message             Message?        @relation(fields: [messageId], references: [id])
+  redactionEvents     RedactionEvent[]
+  errorEvents         ErrorEvent[]
+
+  @@index([conversationId, createdAt])
+  @@index([provider, model, createdAt])
+  @@index([status, createdAt])
+}
+
+model RedactionEvent {
+  id             String       @id @default(cuid())
+  inferenceLogId String
+  fieldName      String
+  redactionType  String
+  count          Int
+  createdAt      DateTime     @default(now())
+  inferenceLog   InferenceLog @relation(fields: [inferenceLogId], references: [id])
+}
+
+model ErrorEvent {
+  id             String       @id @default(cuid())
+  inferenceLogId String
+  code           String
+  message        String
+  provider       String?
+  createdAt      DateTime     @default(now())
+  inferenceLog   InferenceLog @relation(fields: [inferenceLogId], references: [id])
+}

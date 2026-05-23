@@ -1,0 +1,168 @@
+@import url("https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --lm: clamp(24px, 6vw, 96px);
+  --primary-indigo: #4f46e5;
+  --primary-indigo-hover: #4338ca;
+  --heading-dark: #111827;
+  --heading-blue: #0f2442;
+  --body-muted: #4c596c;
+  --body-soft: #6b7280;
+  --line: #e5e7eb;
+  --line-soft: #e8eef7;
+  --line-strong: #d7dfeb;
+  --font-display: "Darker Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: #ffffff;
+  color: var(--heading-dark);
+  font-family: var(--font-body);
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background:
+    linear-gradient(90deg, transparent calc(var(--lm) - 1px), var(--line-soft) var(--lm), transparent calc(var(--lm) + 1px)),
+    linear-gradient(90deg, transparent calc(100% - var(--lm) - 1px), var(--line-soft) calc(100% - var(--lm)), transparent calc(100% - var(--lm) + 1px)),
+    #ffffff;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(79, 70, 229, 0.16);
+}
+
+.zynex-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
+.zynex-section {
+  position: relative;
+  padding-inline: var(--lm);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.zynex-section-inner {
+  width: min(1180px, 100%);
+  margin-inline: auto;
+}
+
+.zynex-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--primary-indigo);
+}
+
+.zynex-heading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--heading-dark);
+}
+
+.zynex-body {
+  color: var(--body-muted);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.zynex-grid {
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.72;
+}
+
+.zynex-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18px 60px rgba(15, 36, 66, 0.08);
+}
+
+.zynex-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0 18px 0 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.zynex-button-primary {
+  background: var(--primary-indigo);
+  color: #ffffff;
+}
+
+.zynex-button-primary:hover {
+  background: var(--primary-indigo-hover);
+  transform: translateY(-1px);
+}
+
+.zynex-button-ghost {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--heading-dark);
+}
+
+.zynex-button-ghost:hover {
+  border-color: var(--primary-indigo);
+  color: var(--primary-indigo);
+}
+
+.zynex-arrow-wrap {
+  position: relative;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.zynex-button-ghost .zynex-arrow-wrap {
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.zynex-arrow {
+  transition: transform 180ms ease;
+}
+
+.zynex-button:hover .zynex-arrow {
+  transform: translateX(2px);
+}
