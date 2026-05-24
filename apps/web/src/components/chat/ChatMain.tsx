@@ -1,4 +1,5 @@
-import { Mic, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { Mail, Mic, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
 import { suggestions } from "@/components/chat/chatData";
 
 type ChatMainProps = {
@@ -99,7 +100,7 @@ export function ChatMain({
           </div>
         </div>
 
-        <footer className="shrink-0 bg-[#F7F8FB] px-5 pb-5">
+        <footer className="shrink-0 bg-[#F7F8FB] px-5 pb-4">
           <div className="relative mx-auto max-w-3xl rounded-[24px] border border-[#DDE5F0] bg-white p-3 shadow-[0_18px_60px_rgba(15,36,66,0.08)]">
             {attachOpen && (
               <div className="absolute bottom-[96px] left-3 z-30 w-64 rounded-2xl border border-[#E8EEF7] bg-white p-2 shadow-2xl shadow-slate-900/12">
@@ -150,6 +151,20 @@ export function ChatMain({
                 </button>
               </div>
             </div>
+          </div>
+          <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-x-4 gap-y-2 font-body text-[12px] font-medium text-[#6B7280]">
+            <span>© 2026 ZyNex by Zyfrr</span>
+            <Link href="/Privacy" className="hover:text-[#4F46E5]">
+              Privacy Policy
+            </Link>
+            <Link href="/Terms" className="hover:text-[#4F46E5]">
+              Terms of Use
+            </Link>
+            <span>Service: LLM inference observability</span>
+            <a href="mailto:support@zyfrr.com" className="inline-flex items-center gap-1 hover:text-[#4F46E5]">
+              <Mail size={13} />
+              support@zyfrr.com
+            </a>
           </div>
         </footer>
       </div>
