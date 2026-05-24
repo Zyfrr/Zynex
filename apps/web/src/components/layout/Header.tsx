@@ -18,12 +18,12 @@ export function Header() {
           <Link href="/Logs">Logs</Link>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/Login" className="hidden font-mono text-xs font-bold uppercase text-[var(--body-muted)] sm:inline">
+          <Button href="/Login" kind="header-login">
             Login
-          </Link>
-          <Link href="/Register">
-            <Button>Start</Button>
-          </Link>
+          </Button>
+          <Button href="/Register" kind="header-signup" arrow arrowSmall>
+            Start
+          </Button>
         </div>
       </nav>
     </header>

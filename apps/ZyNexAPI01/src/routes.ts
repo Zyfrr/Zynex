@@ -7,8 +7,8 @@ import { ingestionRouter } from "@/modules/ingestion/ingestion.router";
 
 export const routes = Router();
 
-routes.use("/ZyNexAPI01/Auth", authRouter);
-routes.use("/ZyNexAPI01/Chat", chatRouter);
-routes.use("/ZyNexAPI01/Conversations", conversationsRouter);
-routes.use("/ZyNexAPI01/Ingestion", ingestionRouter);
-routes.use("/ZyNexAPI01/Analytics", analyticsRouter);
+routes.use("/api/v1/auth", authRouter);
+routes.use("/api/v1/chat", chatRouter);
+routes.use("/api/v1/conversations", conversationsRouter);
+routes.use("/api/v1/ingestion", ingestionRouter);
+routes.use("/api/v1/analytics", analyticsRouter);

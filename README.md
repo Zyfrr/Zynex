@@ -12,16 +12,17 @@ ZyNex is a Next.js + TypeScript monorepo for an AI roleplay chatbot with LLM inf
 
 ## API Naming
 
-Product route prefix: `/ZyNexAPI01`
+Product route pattern: `/api/v1/<module>/ZyNexAPI01<Module><Action>`
 
 Examples:
 
-- `/ZyNexAPI01/Auth/Register`
-- `/ZyNexAPI01/Auth/Login`
-- `/ZyNexAPI01/Conversations/List`
-- `/ZyNexAPI01/Chat/Conversations/:ConversationId/Messages`
-- `/ZyNexAPI01/Ingestion/Logs`
-- `/ZyNexAPI01/Analytics/Overview`
+- `/api/v1/auth/ZyNexAPI01AuthLogin`
+- `/api/v1/auth/ZyNexAPI01AuthEmailStart`
+- `/api/v1/auth/ZyNexAPI01AuthPhoneStart`
+- `/api/v1/conversations/ZyNexAPI01ConversationsList`
+- `/api/v1/chat/ZyNexAPI01ChatConversations/:ConversationId/Messages`
+- `/api/v1/ingestion/ZyNexAPI01IngestionLogs`
+- `/api/v1/analytics/ZyNexAPI01AnalyticsOverview`
 
 ## Local Development
 

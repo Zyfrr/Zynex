@@ -5,7 +5,7 @@ import { inferenceLogSchema } from "./ingestion.schema";
 export const ingestionRouter = Router();
 
 ingestionRouter.post(
-  "/Logs",
+  "/ZyNexAPI01IngestionLogs",
   asyncHandler(async (req, res) => {
     const log = inferenceLogSchema.parse(req.body);
 

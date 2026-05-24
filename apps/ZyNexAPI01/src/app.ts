@@ -1,4 +1,5 @@
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import express from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -11,6 +12,7 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors({ origin: true, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestIdMiddleware);
   app.use(pinoHttp());

@@ -10,6 +10,7 @@
   "dependencies": {
     "@zynex/shared": "workspace:*",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
     "next": "^14.2.23",
     "next-auth": "^4.24.11",
     "react": "^18.3.1",

@@ -4,7 +4,7 @@ import { asyncHandler } from "@/utils/asyncHandler";
 export const conversationsRouter = Router();
 
 conversationsRouter.post(
-  "/Create",
+  "/ZyNexAPI01ConversationsCreate",
   asyncHandler(async (_req, res) => {
     res.status(201).json({
       success: true,
@@ -18,7 +18,7 @@ conversationsRouter.post(
 );
 
 conversationsRouter.get(
-  "/List",
+  "/ZyNexAPI01ConversationsList",
   asyncHandler(async (_req, res) => {
     res.json({
       success: true,
@@ -31,7 +31,7 @@ conversationsRouter.get(
 );
 
 conversationsRouter.patch(
-  "/:ConversationId/Cancel",
+  "/ZyNexAPI01Conversations/:ConversationId/Cancel",
   asyncHandler(async (req, res) => {
     res.json({
       success: true,

@@ -5,7 +5,7 @@ import { sendMessageSchema } from "./chat.schema";
 export const chatRouter = Router();
 
 chatRouter.post(
-  "/Conversations/:ConversationId/Messages",
+  "/ZyNexAPI01ChatConversations/:ConversationId/Messages",
   asyncHandler(async (req, res) => {
     const body = sendMessageSchema.parse(req.body);
     const conversationId = req.params.ConversationId;

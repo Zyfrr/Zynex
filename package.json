@@ -10,8 +10,14 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\""
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/nodemailer": "^8.0.0",
     "prettier": "^3.4.2",
+    "prisma": "^6.19.0",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.0"
   }
 }

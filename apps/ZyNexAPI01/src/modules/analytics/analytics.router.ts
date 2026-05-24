@@ -4,7 +4,7 @@ import { asyncHandler } from "@/utils/asyncHandler";
 export const analyticsRouter = Router();
 
 analyticsRouter.get(
-  "/Overview",
+  "/ZyNexAPI01AnalyticsOverview",
   asyncHandler(async (_req, res) => {
     res.json({
       success: true,
