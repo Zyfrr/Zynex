@@ -28,14 +28,10 @@ export function ChatMain({
   setRecording,
   prompt,
   setPrompt,
-  user,
   authenticated,
   onLoginClick,
   onSignupClick
 }: ChatMainProps) {
-  const displayName = user?.name || user?.email || "ZyNex Operator";
-  const initials = getInitials(displayName);
-
   return (
     <section className="flex min-w-0 flex-1 flex-col">
       <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-[#E8EEF7] bg-white/90 px-3 py-2 backdrop-blur-xl sm:px-5">
@@ -52,23 +48,6 @@ export function ChatMain({
           <span className="truncate">ZyNex Chat</span>
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <div className="group relative">
-            <button
-              type="button"
-              onClick={() => setTemporaryChat(!temporaryChat)}
-              className={`flex h-9 items-center gap-2 rounded-full border px-2.5 font-body text-xs font-semibold transition sm:px-3 sm:text-sm ${
-                temporaryChat
-                  ? "border-[#4F46E5] bg-indigo-50 text-[#4F46E5]"
-                  : "border-[#E8EEF7] bg-white text-[#4C596C] hover:border-[#D7DFEB]"
-              }`}
-            >
-              <Sparkles size={15} />
-              <span className="hidden min-[420px]:inline">Temporary</span>
-            </button>
-            <div className="pointer-events-none absolute right-0 top-11 z-40 w-64 translate-y-1 rounded-xl border border-[#E8EEF7] bg-[#111827] p-3 text-xs leading-5 text-white opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
-              Temporary chat keeps the current conversation out of saved history and logging previews.
-            </div>
-          </div>
           {!authenticated && (
             <>
               <button
@@ -87,16 +66,23 @@ export function ChatMain({
               </button>
             </>
           )}
-          {authenticated && (
-            <div className="flex max-w-[180px] items-center gap-2 rounded-full border border-[#E8EEF7] bg-white py-1 pl-1 pr-2 sm:max-w-[240px] sm:pr-3">
-              <span className="grid h-8 w-8 overflow-hidden rounded-full bg-[#111827] place-items-center font-body text-[11px] font-bold uppercase text-white">
-                {user?.image ? <img src={user.image} alt={displayName} className="h-full w-full object-cover" /> : initials}
-              </span>
-              <span className="truncate font-body text-xs font-semibold text-[#253248] sm:text-sm">
-                {displayName}
-              </span>
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={() => setTemporaryChat(!temporaryChat)}
+              className={`flex h-9 items-center gap-2 rounded-full border px-2.5 font-body text-xs font-semibold transition sm:px-3 sm:text-sm ${
+                temporaryChat
+                  ? "border-[#4F46E5] bg-indigo-50 text-[#4F46E5]"
+                  : "border-[#E8EEF7] bg-white text-[#4C596C] hover:border-[#D7DFEB]"
+              }`}
+            >
+              <Sparkles size={15} />
+              <span className="hidden min-[420px]:inline">Temporary</span>
+            </button>
+            <div className="pointer-events-none absolute right-0 top-11 z-40 w-64 translate-y-1 rounded-xl border border-[#E8EEF7] bg-[#111827] p-3 text-xs leading-5 text-white opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
+              Temporary chat keeps the current conversation out of saved history and logging previews.
             </div>
-          )}
+          </div>
         </div>
       </header>
 
@@ -195,15 +181,6 @@ export function ChatMain({
       </div>
     </section>
   );
-}
-
-function getInitials(value: string) {
-  const parts = value
-    .split(/[ @._-]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return ((parts[0]?.[0] || "Z") + (parts[1]?.[0] || parts[0]?.[1] || "N")).toUpperCase();
 }
 
 function IconButton({

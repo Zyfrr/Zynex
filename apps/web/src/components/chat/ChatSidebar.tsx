@@ -1,8 +1,10 @@
 import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User, X } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { toast } from "sonner";
 import { groupedChats, projects } from "@/components/chat/chatData";
 import { ListRow, MenuAction, projectIcon, SidebarSection } from "@/components/chat/SidebarMenu";
 import { SidebarPanelIcon } from "@/components/chat/SidebarPanelIcon";
+import { zynexApi } from "@/lib/api";
 
 type ChatSidebarProps = {
   collapsed: boolean;
@@ -41,7 +43,18 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const activeChats = groupedChats.filter((group) => group.items.length > 0);
   const displayName = user?.name || user?.email || "ZyNex Operator";
+  const firstName = getFirstName(displayName);
   const initials = getInitials(displayName);
+
+  async function logout() {
+    try {
+      await zynexApi("/api/v1/auth/ZyNexAPI01AuthLogout", { method: "POST" });
+    } catch {
+      // NextAuth sign-out still clears the frontend session if the API cookie is already gone.
+    }
+    toast.success("Code: AUTH_LOGOUT", { description: "Message: You have been logged out successfully." });
+    await signOut({ callbackUrl: "/" });
+  }
 
   return (
     <aside
@@ -205,7 +218,7 @@ export function ChatSidebar({
             <MenuAction icon={<User size={15} />} label="Profile" />
             <MenuAction icon={<Settings size={15} />} label="Settings" />
             <MenuAction icon={<Sparkles size={15} />} label="Dashboard" />
-            <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="w-full">
+            <button type="button" onClick={logout} className="w-full">
               <MenuAction icon={<LogOut size={15} />} label="Logout" danger />
             </button>
           </div>
@@ -229,10 +242,10 @@ export function ChatSidebar({
           {!collapsed && (
             <span className="min-w-0 text-left">
               <span className="block truncate font-body text-sm font-semibold text-[#111827]">
-                {authenticated ? displayName : "Login"}
+                {authenticated ? firstName : "Login"}
               </span>
               <span className="block truncate font-body text-xs font-medium text-[#6B7280]">
-                {authenticated ? user?.email || "Account and settings" : "Access your workspace"}
+                {authenticated ? "Account and settings" : "Access your workspace"}
               </span>
             </span>
           )}
@@ -244,9 +257,23 @@ export function ChatSidebar({
 
 function getInitials(value: string) {
   const parts = value
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length > 1) return `${parts[0]?.[0] || "Z"}${parts[parts.length - 1]?.[0] || "N"}`.toUpperCase();
+
+  const fallbackParts = value
     .split(/[ @._-]+/)
     .map((part) => part.trim())
     .filter(Boolean);
 
-  return (parts[0]?.[0] || "Z") + (parts[1]?.[0] || parts[0]?.[1] || "N");
+  return `${fallbackParts[0]?.[0] || "Z"}${fallbackParts[1]?.[0] || fallbackParts[0]?.[1] || "N"}`.toUpperCase();
+}
+
+function getFirstName(value: string) {
+  const name = value.trim();
+  if (!name) return "ZyNex";
+  if (name.includes("@")) return name.split("@")[0] || "ZyNex";
+  return name.split(/\s+/)[0] || "ZyNex";
 }

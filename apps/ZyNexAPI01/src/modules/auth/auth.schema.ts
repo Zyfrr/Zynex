@@ -46,3 +46,30 @@ export const phoneVerifySchema = phoneStartSchema.extend({
 export const passwordResetStartSchema = z.object({
   email: z.string().email()
 });
+
+export const profileUpdateSchema = z.object({
+  firstName: z.string().min(2),
+  lastName: z.string().min(1),
+  dateOfBirth: z.string().optional()
+});
+
+export const emailChangeStartSchema = z.object({
+  newEmail: z.string().email()
+});
+
+export const emailChangeVerifySchema = emailChangeStartSchema.extend({
+  code: z.string().regex(/^\d{4,8}$/)
+});
+
+export const phoneChangeStartSchema = z.object({
+  countryCode: z.string().regex(/^\+\d{1,4}$/).default("+91"),
+  phoneNumber: z.string().regex(/^\d{6,14}$/)
+});
+
+export const phoneChangeVerifySchema = phoneChangeStartSchema.extend({
+  code: z.string().regex(/^\d{4,8}$/)
+});
+
+export const deleteAccountSchema = z.object({
+  confirmation: z.string().min(3)
+});

@@ -385,6 +385,180 @@ export class AuthService {
       include: { profile: true }
     });
   }
+
+  async updateProfile(userId: string, input: { firstName: string; lastName: string; dateOfBirth?: string }) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { name: `${input.firstName} ${input.lastName}` },
+      include: { profile: true }
+    });
+
+    const profile = await prisma.userProfile.upsert({
+      where: { userId },
+      update: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null
+      },
+      create: {
+        userId,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null
+      }
+    });
+
+    return { ...user, profile };
+  }
+
+  async startEmailChange(userId: string, newEmail: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.email) throw new AppError(ErrorCode.ACCOUNT_NOT_FOUND, "Current email is required before changing email.", 404);
+
+    const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+    if (existing && existing.id !== userId) throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "This email is already registered.", 409);
+
+    const digits = await configService.getNumber("AuthOtpDigits");
+    const expiresMinutes = await configService.getNumber("AuthOtpExpiresMinutes");
+    const maxAttempts = await configService.getNumber("AuthOtpMaxAttempts");
+    const code = generateNumericCode(digits);
+    const identifier = `EMAIL_CHANGE:${userId}:${newEmail}`;
+
+    await prisma.verificationCode.updateMany({
+      where: { identifier, purpose: "SIGNUP", status: "PENDING" },
+      data: { status: "EXPIRED" }
+    });
+    await prisma.verificationCode.create({
+      data: {
+        identifier,
+        codeHash: await hashOtp(code),
+        purpose: "SIGNUP",
+        maxAttempts,
+        expiresAt: addMinutes(new Date(), expiresMinutes)
+      }
+    });
+
+    await emailService.sendEmailChangeCode(user.email, code, newEmail);
+    return { currentEmail: user.email, newEmail, digits, expiresInMinutes: expiresMinutes };
+  }
+
+  async verifyEmailChange(userId: string, newEmail: string, code: string) {
+    const identifier = `EMAIL_CHANGE:${userId}:${newEmail}`;
+    const verification = await prisma.verificationCode.findFirst({
+      where: { identifier, purpose: "SIGNUP", status: "PENDING" },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (!verification || verification.expiresAt < new Date()) {
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid or expired email change code.", 401);
+    }
+    const valid = await verifyOtp(verification.codeHash, code);
+    if (!valid) {
+      await prisma.verificationCode.update({ where: { id: verification.id }, data: { attempts: { increment: 1 } } });
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid email change code.", 401);
+    }
+
+    await prisma.verificationCode.update({ where: { id: verification.id }, data: { status: "CONSUMED", consumedAt: new Date() } });
+    return prisma.user.update({ where: { id: userId }, data: { email: newEmail }, include: { profile: true } });
+  }
+
+  async startPhoneChange(userId: string, countryCode: string, phoneNumber: string) {
+    const existing = await prisma.user.findUnique({ where: { phoneNumber } });
+    if (existing && existing.id !== userId) throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "This phone number is already registered.", 409);
+
+    const digits = await configService.getNumber("AuthOtpDigits");
+    const expiresMinutes = await configService.getNumber("AuthOtpExpiresMinutes");
+    const maxAttempts = await configService.getNumber("AuthOtpMaxAttempts");
+    const code = generateNumericCode(digits);
+    const identifier = `PHONE_CHANGE:${userId}:${countryCode}${phoneNumber}`;
+
+    await prisma.verificationCode.updateMany({
+      where: { identifier, purpose: "PHONE_LOGIN", status: "PENDING" },
+      data: { status: "EXPIRED" }
+    });
+    await prisma.verificationCode.create({
+      data: {
+        identifier,
+        codeHash: await hashOtp(code),
+        purpose: "PHONE_LOGIN",
+        maxAttempts,
+        expiresAt: addMinutes(new Date(), expiresMinutes)
+      }
+    });
+
+    const delivery = await smsService.sendVerificationCode(`${countryCode}${phoneNumber}`, code);
+    return { countryCode, phoneNumber, digits, expiresInMinutes: expiresMinutes, delivery };
+  }
+
+  async verifyPhoneChange(userId: string, countryCode: string, phoneNumber: string, code: string) {
+    const identifier = `PHONE_CHANGE:${userId}:${countryCode}${phoneNumber}`;
+    const verification = await prisma.verificationCode.findFirst({
+      where: { identifier, purpose: "PHONE_LOGIN", status: "PENDING" },
+      orderBy: { createdAt: "desc" }
+    });
+
+    if (!verification || verification.expiresAt < new Date()) {
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid or expired phone change code.", 401);
+    }
+    const valid = await verifyOtp(verification.codeHash, code);
+    if (!valid) {
+      await prisma.verificationCode.update({ where: { id: verification.id }, data: { attempts: { increment: 1 } } });
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid phone change code.", 401);
+    }
+
+    await prisma.verificationCode.update({ where: { id: verification.id }, data: { status: "CONSUMED", consumedAt: new Date() } });
+    return prisma.user.update({ where: { id: userId }, data: { phoneCountryCode: countryCode, phoneNumber }, include: { profile: true } });
+  }
+
+  async deleteAccount(userId: string, confirmation: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } });
+    if (!user) throw new AppError(ErrorCode.ACCOUNT_NOT_FOUND, "Account not found.", 404);
+
+    const profileName = (user.name || `${user.profile?.firstName || ""} ${user.profile?.lastName || ""}`.trim() || user.email || user.id).trim();
+    const requiredConfirmation = `delete my profile ${profileName}`;
+    if (confirmation !== requiredConfirmation) {
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, `Please type "${requiredConfirmation}" to delete your account.`, 400, {
+        requiredConfirmation
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const conversations = await tx.conversation.findMany({ where: { userId }, select: { id: true } });
+      const conversationIds = conversations.map((conversation) => conversation.id);
+      const inferenceLogs = await tx.inferenceLog.findMany({ where: { userId }, select: { id: true } });
+      const inferenceLogIds = inferenceLogs.map((log) => log.id);
+
+      if (inferenceLogIds.length) {
+        await tx.redactionEvent.deleteMany({ where: { inferenceLogId: { in: inferenceLogIds } } });
+        await tx.errorEvent.deleteMany({ where: { inferenceLogId: { in: inferenceLogIds } } });
+      }
+
+      await tx.inferenceLog.deleteMany({ where: { userId } });
+      if (conversationIds.length) {
+        await tx.message.deleteMany({ where: { conversationId: { in: conversationIds } } });
+      }
+      await tx.conversation.deleteMany({ where: { userId } });
+      await tx.termsAcceptance.deleteMany({ where: { userId } });
+      await tx.authAuditLog.deleteMany({ where: { userId } });
+      await tx.passwordResetToken.deleteMany({ where: { userId } });
+      await tx.account.deleteMany({ where: { userId } });
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.userProfile.deleteMany({ where: { userId } });
+      await tx.verificationCode.deleteMany({
+        where: {
+          OR: [
+            user.email ? { identifier: user.email } : undefined,
+            user.phoneNumber && user.phoneCountryCode ? { identifier: `${user.phoneCountryCode}${user.phoneNumber}` } : undefined,
+            { identifier: { startsWith: `EMAIL_CHANGE:${userId}:` } },
+            { identifier: { startsWith: `PHONE_CHANGE:${userId}:` } }
+          ].filter(Boolean) as Array<{ identifier: string } | { identifier: { startsWith: string } }>
+        }
+      });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return { deleted: true };
+  }
 }
 
 export const authService = new AuthService();
