@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "6.19.0",
     "@zynex/shared": "workspace:*",
     "argon2": "^0.44.0",
     "bullmq": "^5.34.5",
@@ -33,6 +33,7 @@
     "@types/node": "^22.10.2",
     "eslint": "^8.57.1",
     "tsx": "^4.19.2",
+    "prisma": "6.19.0",
     "typescript": "^5.7.2"
   }
 }
