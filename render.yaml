@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: zynex-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /api/v1/health/ZyNexAPI01HealthCheck
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ZYNEX_API_PORT
+        value: 4101
+      - key: DATABASE_URL
+        sync: false
+      - key: ZYNEX_JWT_SECRET
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: ZYNEX_COOKIE_DOMAIN
+        sync: false
+      - key: SPACESHIP_SMTP_HOST
+        sync: false
+      - key: SPACESHIP_SMTP_PORT
+        value: 587
+      - key: SPACESHIP_SMTP_USER
+        value: support@zyfrr.com
+      - key: SPACESHIP_SMTP_PASS
+        sync: false
+      - key: ZYNEX_SUPPORT_EMAIL
+        value: support@zyfrr.com
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_PHONE
+        sync: false

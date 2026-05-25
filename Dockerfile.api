@@ -1,0 +1,24 @@
+FROM node:20-alpine AS base
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+ARG DATABASE_URL=postgresql://zynex:zynex@localhost:5432/zynex
+ENV DATABASE_URL=$DATABASE_URL
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY apps/ZyNexAPI01 ./apps/ZyNexAPI01
+COPY packages ./packages
+COPY prisma ./prisma
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm prisma generate
+RUN pnpm --filter @zynex/ZyNexAPI01 build
+
+ENV NODE_ENV=production
+ENV ZYNEX_API_PORT=4101
+
+EXPOSE 4101
+
+CMD ["node", "apps/ZyNexAPI01/dist/server.js"]

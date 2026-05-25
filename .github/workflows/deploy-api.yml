@@ -1,0 +1,57 @@
+name: Deploy ZyNex API Free Stack
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/ZyNexAPI01/**"
+      - "packages/**"
+      - "prisma/**"
+      - "Dockerfile.api"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.base.json"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Build API
+        run: pnpm --filter @zynex/ZyNexAPI01 build
+
+      - name: Run Prisma migrations
+        run: pnpm prisma migrate deploy
+
+      - name: Trigger Render API deploy
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL is not set. Skipping Render deploy trigger."
+            exit 0
+          fi
+
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"

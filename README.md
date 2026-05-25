@@ -34,3 +34,18 @@ pnpm dev
 Frontend: `http://localhost:3000`
 
 API: `http://localhost:4101/ZyNexAPI01`
+
+Health check: `http://localhost:4101/api/v1/health/ZyNexAPI01HealthCheck`
+
+## Deployment
+
+Recommended free-friendly deployment:
+
+- Neon PostgreSQL free plan for the database.
+- Render free web service for `apps/ZyNexAPI01`.
+- Vercel Hobby for `apps/web`.
+- GitHub Actions for API build, Prisma migrations, and Render deploy trigger.
+
+Guide: `docs/deployment/free-neon-render-cicd.md`
+
+AWS ECS Express Mode notes are kept in `docs/deployment/aws-backend-cicd.md` for a later production upgrade path.
