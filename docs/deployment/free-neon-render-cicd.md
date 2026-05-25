@@ -164,8 +164,15 @@ It does:
 2. Install dependencies with pnpm.
 3. Generate Prisma client.
 4. Build the API.
-5. Run Prisma migrations against Neon.
-6. Trigger Render deploy hook.
+5. Trigger Render deploy hook.
+
+Render runs Prisma migrations during container startup before the API starts:
+
+```txt
+pnpm prisma migrate deploy && node apps/ZyNexAPI01/dist/server.js
+```
+
+Keeping migration execution in Render avoids GitHub Actions and Render racing each other against the same Neon database.
 
 Manual run:
 

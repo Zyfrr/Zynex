@@ -44,9 +44,6 @@ jobs:
       - name: Build API
         run: pnpm --filter @zynex/ZyNexAPI01 build
 
-      - name: Run Prisma migrations
-        run: pnpm prisma migrate deploy
-
       - name: Trigger Render API deploy
         run: |
           if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
