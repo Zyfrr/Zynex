@@ -1,4 +1,4 @@
-import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User } from "lucide-react";
+import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User, X } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { groupedChats, projects } from "@/components/chat/chatData";
 import { ListRow, MenuAction, projectIcon, SidebarSection } from "@/components/chat/SidebarMenu";
@@ -7,6 +7,8 @@ import { SidebarPanelIcon } from "@/components/chat/SidebarPanelIcon";
 type ChatSidebarProps = {
   collapsed: boolean;
   setCollapsed: (value: boolean) => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
   profileOpen: boolean;
   setProfileOpen: (value: boolean) => void;
   projectsOpen: boolean;
@@ -23,6 +25,8 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   collapsed,
   setCollapsed,
+  mobileOpen,
+  onMobileClose,
   profileOpen,
   setProfileOpen,
   projectsOpen,
@@ -41,8 +45,10 @@ export function ChatSidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col border-r border-[#E8EEF7] bg-white transition-[width] duration-300 ${
-        collapsed ? "w-[68px]" : "w-[264px]"
+      className={`fixed inset-y-0 left-0 z-40 flex w-[min(84vw,300px)] shrink-0 flex-col border-r border-[#E8EEF7] bg-white shadow-2xl shadow-slate-950/15 transition-transform duration-300 md:relative md:z-auto md:shadow-none md:transition-[width] ${
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      } ${
+        collapsed ? "md:w-[68px]" : "md:w-[264px]"
       }`}
     >
       <div className="flex h-[68px] shrink-0 items-center justify-between border-b border-[#E8EEF7] px-3">
@@ -90,7 +96,7 @@ export function ChatSidebar({
               type="button"
               aria-label="Close sidebar"
               onClick={() => setCollapsed(true)}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#6B7280] transition hover:bg-[#F3F5FA] hover:text-[#4F46E5]"
+              className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-[#6B7280] transition hover:bg-[#F3F5FA] hover:text-[#4F46E5] md:grid"
             >
               <SidebarPanelIcon className="h-5 w-5" />
             </button>
@@ -98,6 +104,16 @@ export function ChatSidebar({
               Close sidebar
             </div>
           </div>
+        )}
+        {!collapsed && (
+          <button
+            type="button"
+            aria-label="Close mobile sidebar"
+            onClick={onMobileClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#6B7280] transition hover:bg-[#F3F5FA] hover:text-[#4F46E5] md:hidden"
+          >
+            <X size={18} />
+          </button>
         )}
       </div>
 

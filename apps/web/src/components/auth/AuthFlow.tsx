@@ -64,9 +64,9 @@ export function AuthFlow({
   }
 
   return (
-    <main className={`${compact ? "" : "min-h-screen bg-[#F7F8FB] px-5 py-8"} text-[#111827]`}>
-      <div className={`mx-auto flex ${compact ? "" : "min-h-[calc(100vh-64px)] max-w-6xl"} items-center justify-center`}>
-        <section className={`grid w-full overflow-hidden bg-white ${compact ? "" : "rounded-[28px] border border-[#E8EEF7] shadow-[0_28px_90px_rgba(15,36,66,0.10)] lg:grid-cols-[0.9fr_1.1fr]"}`}>
+    <main className={`${compact ? "" : "min-h-screen bg-[#F7F8FB] px-3 py-4 sm:px-5 sm:py-8"} text-[#111827]`}>
+      <div className={`mx-auto flex ${compact ? "" : "min-h-[calc(100vh-32px)] max-w-6xl sm:min-h-[calc(100vh-64px)]"} items-center justify-center`}>
+        <section className={`grid w-full overflow-hidden bg-white ${compact ? "" : "rounded-[20px] border border-[#E8EEF7] shadow-[0_28px_90px_rgba(15,36,66,0.10)] sm:rounded-[28px] lg:grid-cols-[0.9fr_1.1fr]"}`}>
           {!compact && <aside className="hidden border-r border-[#E8EEF7] bg-[#FAFBFF] p-10 lg:block">
             <Link href="/" className="flex items-center gap-3">
               <img src="/assets/zynex-logos/zynex_favicon.svg" alt="ZyNex" className="h-10 w-10 rounded-full" />
@@ -97,7 +97,7 @@ export function AuthFlow({
             </div>
           </aside>}
 
-          <div className={compact ? "p-1" : "p-6 sm:p-10"}>
+          <div className={compact ? "p-1" : "p-4 sm:p-6 lg:p-10"}>
             <div className="mx-auto max-w-md">
               {step !== "start" && (
                 <button
@@ -190,14 +190,14 @@ function StartStep({
   return (
     <>
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">{isSignup ? "Sign up for free" : "Welcome back"}</p>
-      <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">
+      <h2 className="mt-3 font-display text-[36px] font-semibold leading-none sm:text-[44px] lg:text-[48px]">
         {isSignup ? "Create your account" : "Log in to ZyNex"}
       </h2>
       <p className="mt-4 font-body text-sm leading-6 text-[#5D6A7C]">
         Continue with a secure provider or use email. We keep the first step intentionally short.
       </p>
 
-      <div className="mt-8 grid gap-3">
+      <div className="mt-6 grid gap-3 sm:mt-8">
         <AuthProviderButton
           label="Continue with Google"
           icon={<span className="font-body text-lg font-bold">G</span>}
@@ -206,7 +206,7 @@ function StartStep({
         <AuthProviderButton label="Continue with phone" icon={<Phone size={18} />} onClick={onPhoneContinue} />
       </div>
 
-      <div className="my-7 flex items-center gap-3">
+      <div className="my-5 flex items-center gap-3 sm:my-7">
         <span className="h-px flex-1 bg-[#E8EEF7]" />
         <span className="font-body text-xs font-semibold uppercase text-[#8A94A6]">or</span>
         <span className="h-px flex-1 bg-[#E8EEF7]" />
@@ -271,7 +271,7 @@ function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: bo
   return (
     <>
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">Email verification</p>
-      <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">Enter your code</h2>
+      <h2 className="mt-3 font-display text-[36px] font-semibold leading-none sm:text-[44px] lg:text-[48px]">Enter your code</h2>
       <p className="mt-4 font-body text-sm leading-6 text-[#5D6A7C]">
         We sent a numeric verification code to <strong>{email || "your email"}</strong>.
       </p>
@@ -279,7 +279,7 @@ function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: bo
         value={code}
         onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
         placeholder="Enter 6 digit code"
-        className="mt-8 h-12 w-full rounded-2xl border border-[#DDE5F0] px-4 text-center font-body text-lg font-bold tracking-[0.35em] outline-none focus:border-[#4F46E5]"
+        className="mt-8 h-12 w-full rounded-2xl border border-[#DDE5F0] px-4 text-center font-body text-base font-bold tracking-[0.25em] outline-none focus:border-[#4F46E5] sm:text-lg sm:tracking-[0.35em]"
       />
       <Button className="mt-5 w-full justify-between" arrow disabled={code.length < 4} onClick={async () => {
         try {
@@ -329,7 +329,7 @@ function PasswordStep({
   return (
     <>
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">Password login</p>
-      <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">Enter password</h2>
+      <h2 className="mt-3 font-display text-[36px] font-semibold leading-none sm:text-[44px] lg:text-[48px]">Enter password</h2>
       <label className="mt-8 block">
         <span className="font-body text-sm font-semibold text-[#253248]">Email address</span>
         <div className="mt-2 flex h-12 items-center gap-3 rounded-2xl border border-[#DDE5F0] px-4 focus-within:border-[#4F46E5]">
@@ -430,11 +430,11 @@ function PhoneStep({
   return (
     <>
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">Phone verification</p>
-      <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">Continue with phone</h2>
+      <h2 className="mt-3 font-display text-[36px] font-semibold leading-none sm:text-[44px] lg:text-[48px]">Continue with phone</h2>
       <p className="mt-4 font-body text-sm leading-6 text-[#5D6A7C]">
         Choose your country code and enter the remaining phone number. SMS delivery will use Twilio.
       </p>
-      <div className="mt-8 grid grid-cols-[130px_1fr] gap-3">
+      <div className="mt-8 grid gap-3 sm:grid-cols-[130px_1fr]">
         <label>
           <span className="font-body text-sm font-semibold text-[#253248]">Country</span>
           <select
@@ -521,7 +521,7 @@ function SignupProfileStep({
   return (
     <>
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">Complete profile</p>
-      <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">Secure your account</h2>
+      <h2 className="mt-3 font-display text-[36px] font-semibold leading-none sm:text-[44px] lg:text-[48px]">Secure your account</h2>
       <p className="mt-4 font-body text-sm leading-6 text-[#5D6A7C]">
         {verifiedSignup.phoneNumber ? "Verified phone:" : "Verified email:"}{" "}
         <strong>{verifiedSignup.phoneNumber ? `${verifiedSignup.phoneCountryCode}${verifiedSignup.phoneNumber}` : email || "your email"}</strong>

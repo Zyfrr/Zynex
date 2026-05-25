@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Mail, Mic, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
+import { Mail, Menu, Mic, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
 import { suggestions } from "@/components/chat/chatData";
 
 type ChatMainProps = {
+  onOpenSidebar: () => void;
   temporaryChat: boolean;
   setTemporaryChat: (value: boolean) => void;
   attachOpen: boolean;
@@ -18,6 +19,7 @@ type ChatMainProps = {
 };
 
 export function ChatMain({
+  onOpenSidebar,
   temporaryChat,
   setTemporaryChat,
   attachOpen,
@@ -36,24 +38,32 @@ export function ChatMain({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-[58px] shrink-0 items-center justify-between border-b border-[#E8EEF7] bg-white/90 px-5 backdrop-blur-xl">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[#4C596C]">
+      <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-[#E8EEF7] bg-white/90 px-3 py-2 backdrop-blur-xl sm:px-5">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[#4C596C]">
+          <button
+            type="button"
+            aria-label="Open sidebar"
+            onClick={onOpenSidebar}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#E8EEF7] bg-white text-[#4C596C] md:hidden"
+          >
+            <Menu size={18} />
+          </button>
           <Sparkles size={17} className="text-[#4F46E5]" />
-          <span>ZyNex Chat</span>
+          <span className="truncate">ZyNex Chat</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <div className="group relative">
             <button
               type="button"
               onClick={() => setTemporaryChat(!temporaryChat)}
-              className={`flex h-9 items-center gap-2 rounded-full border px-3 font-body text-sm font-semibold transition ${
+              className={`flex h-9 items-center gap-2 rounded-full border px-2.5 font-body text-xs font-semibold transition sm:px-3 sm:text-sm ${
                 temporaryChat
                   ? "border-[#4F46E5] bg-indigo-50 text-[#4F46E5]"
                   : "border-[#E8EEF7] bg-white text-[#4C596C] hover:border-[#D7DFEB]"
               }`}
             >
               <Sparkles size={15} />
-              Temporary
+              <span className="hidden min-[420px]:inline">Temporary</span>
             </button>
             <div className="pointer-events-none absolute right-0 top-11 z-40 w-64 translate-y-1 rounded-xl border border-[#E8EEF7] bg-[#111827] p-3 text-xs leading-5 text-white opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
               Temporary chat keeps the current conversation out of saved history and logging previews.
@@ -64,25 +74,25 @@ export function ChatMain({
               <button
                 type="button"
                 onClick={onLoginClick}
-                className="h-9 rounded-full border border-[#E8EEF7] bg-white px-4 font-body text-sm font-semibold text-[#253248] hover:border-[#4F46E5] hover:text-[#4F46E5]"
+                className="h-9 rounded-full border border-[#E8EEF7] bg-white px-3 font-body text-xs font-semibold text-[#253248] hover:border-[#4F46E5] hover:text-[#4F46E5] sm:px-4 sm:text-sm"
               >
                 Login
               </button>
               <button
                 type="button"
                 onClick={onSignupClick}
-                className="h-9 rounded-full bg-[#111827] px-4 font-body text-sm font-semibold text-white hover:bg-[#242A33]"
+                className="h-9 rounded-full bg-[#111827] px-3 font-body text-xs font-semibold text-white hover:bg-[#242A33] sm:px-4 sm:text-sm"
               >
                 Sign up for free
               </button>
             </>
           )}
           {authenticated && (
-            <div className="flex items-center gap-2 rounded-full border border-[#E8EEF7] bg-white py-1 pl-1 pr-3">
+            <div className="flex max-w-[180px] items-center gap-2 rounded-full border border-[#E8EEF7] bg-white py-1 pl-1 pr-2 sm:max-w-[240px] sm:pr-3">
               <span className="grid h-8 w-8 overflow-hidden rounded-full bg-[#111827] place-items-center font-body text-[11px] font-bold uppercase text-white">
                 {user?.image ? <img src={user.image} alt={displayName} className="h-full w-full object-cover" /> : initials}
               </span>
-              <span className="max-w-[180px] truncate font-body text-sm font-semibold text-[#253248]">
+              <span className="truncate font-body text-xs font-semibold text-[#253248] sm:text-sm">
                 {displayName}
               </span>
             </div>
@@ -91,15 +101,15 @@ export function ChatMain({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-8">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
           <div className="w-full max-w-3xl text-center">
-            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-[#E8EEF7] bg-white shadow-sm">
-              <img src="/assets/zynex-logos/zynex_favicon.svg" alt="" className="h-9 w-9 rounded-full" />
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-[#E8EEF7] bg-white shadow-sm sm:h-14 sm:w-14">
+              <img src="/assets/zynex-logos/zynex_favicon.svg" alt="" className="h-8 w-8 rounded-full sm:h-9 sm:w-9" />
             </div>
-            <h1 className="mt-5 font-display text-[52px] font-semibold leading-[0.95] tracking-normal text-[#111827]">
+            <h1 className="mt-5 font-display text-[34px] font-semibold leading-[0.95] tracking-normal text-[#111827] sm:text-[44px] lg:text-[52px]">
               How can ZyNex help today?
             </h1>
-            <p className="mx-auto mt-4 max-w-xl font-body text-[15px] leading-7 text-[#5D6A7C]">
+            <p className="mx-auto mt-4 max-w-xl font-body text-sm leading-6 text-[#5D6A7C] sm:text-[15px] sm:leading-7">
               Ask a question, practice a roleplay, compare providers, or inspect inference behavior.
             </p>
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
@@ -115,10 +125,10 @@ export function ChatMain({
           </div>
         </div>
 
-        <footer className="shrink-0 bg-[#F7F8FB] px-5 pb-4">
-          <div className="relative mx-auto max-w-3xl rounded-[24px] border border-[#DDE5F0] bg-white p-3 shadow-[0_18px_60px_rgba(15,36,66,0.08)]">
+        <footer className="shrink-0 bg-[#F7F8FB] px-3 pb-3 sm:px-5 sm:pb-4">
+          <div className="relative mx-auto max-w-3xl rounded-[20px] border border-[#DDE5F0] bg-white p-2.5 shadow-[0_18px_60px_rgba(15,36,66,0.08)] sm:rounded-[24px] sm:p-3">
             {attachOpen && (
-              <div className="absolute bottom-[96px] left-3 z-30 w-64 rounded-2xl border border-[#E8EEF7] bg-white p-2 shadow-2xl shadow-slate-900/12">
+              <div className="absolute bottom-[96px] left-2 right-2 z-30 rounded-2xl border border-[#E8EEF7] bg-white p-2 shadow-2xl shadow-slate-900/12 sm:left-3 sm:right-auto sm:w-64">
                 <AttachAction label="Upload file" subtext="PDF, CSV, DOCX, TXT" />
                 <AttachAction label="Connect source" subtext="Knowledge base or URL" />
                 <AttachAction label="Add screenshot" subtext="Image context for the prompt" />
@@ -128,10 +138,10 @@ export function ChatMain({
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="Message ZyNex..."
-              rows={3}
-              className="min-h-[82px] w-full resize-none bg-transparent px-3 py-2 font-body text-[15px] leading-6 text-[#111827] outline-none placeholder:text-[#8A94A6]"
+              rows={2}
+              className="min-h-[76px] w-full resize-none bg-transparent px-3 py-2 font-body text-sm leading-6 text-[#111827] outline-none placeholder:text-[#8A94A6] sm:min-h-[82px] sm:text-[15px]"
             />
-            <div className="flex items-center justify-between gap-3 px-1 pt-2">
+            <div className="flex items-center justify-between gap-2 px-1 pt-2">
               <div className="flex items-center gap-1.5">
                 <IconButton label="Attach files" active={attachOpen} onClick={() => setAttachOpen(!attachOpen)}>
                   <Paperclip size={18} />
@@ -167,7 +177,7 @@ export function ChatMain({
               </div>
             </div>
           </div>
-          <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-x-4 gap-y-2 font-body text-[12px] font-medium text-[#6B7280]">
+          <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center font-body text-[11px] font-medium text-[#6B7280] sm:gap-x-4 sm:text-[12px]">
             <span>© 2026 ZyNex by Zyfrr</span>
             <Link href="/Privacy" className="hover:text-[#4F46E5]">
               Privacy Policy

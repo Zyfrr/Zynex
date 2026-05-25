@@ -17,6 +17,7 @@ type WorkspaceUser = {
 export function ChatWorkspace() {
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [temporaryChat, setTemporaryChat] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -42,9 +43,19 @@ export function ChatWorkspace() {
   return (
     <main className="min-h-screen bg-[#F7F8FB] text-[#111827]">
       <div className="flex h-screen overflow-hidden">
+        {mobileSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close sidebar overlay"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 z-30 bg-slate-950/35 backdrop-blur-[2px] md:hidden"
+          />
+        )}
         <ChatSidebar
           collapsed={collapsed}
           setCollapsed={setCollapsed}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
           profileOpen={profileOpen}
           setProfileOpen={setProfileOpen}
           projectsOpen={projectsOpen}
@@ -58,6 +69,10 @@ export function ChatWorkspace() {
           onLoginClick={() => openAuth("login")}
         />
         <ChatMain
+          onOpenSidebar={() => {
+            setCollapsed(false);
+            setMobileSidebarOpen(true);
+          }}
           temporaryChat={temporaryChat}
           setTemporaryChat={setTemporaryChat}
           attachOpen={attachOpen}
@@ -73,8 +88,8 @@ export function ChatWorkspace() {
         />
       </div>
       {authMode && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 backdrop-blur-sm">
-          <div className="relative max-h-[92vh] w-full max-w-[520px] overflow-y-auto rounded-[28px] border border-[#E8EEF7] bg-white p-6 shadow-2xl shadow-slate-950/20">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-3 py-3 backdrop-blur-sm sm:px-4">
+          <div className="relative max-h-[94dvh] w-full max-w-[520px] overflow-y-auto rounded-[20px] border border-[#E8EEF7] bg-white p-4 shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-6">
             <button
               type="button"
               aria-label="Close auth modal"
