@@ -106,3 +106,26 @@ a {
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 18px 60px rgba(15, 36, 66, 0.08);
 }
+
+.zynex-auth-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 70, 229, 0.52) transparent;
+}
+
+.zynex-auth-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.zynex-auth-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zynex-auth-scroll::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.42);
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+}
+
+.zynex-auth-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 70, 229, 0.68);
+}

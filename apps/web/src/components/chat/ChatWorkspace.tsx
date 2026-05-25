@@ -89,7 +89,7 @@ export function ChatWorkspace() {
       </div>
       {authMode && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-2 py-2 backdrop-blur-sm sm:px-4">
-          <div className="relative w-full max-w-[min(94vw,860px)] rounded-[18px] border border-[#E8EEF7] bg-white p-3 shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-5">
+          <div className="zynex-auth-scroll relative max-h-[calc(100vh-24px)] w-auto max-w-[calc(100vw-16px)] overflow-y-auto rounded-[18px] border border-[#E8EEF7] bg-white p-3 shadow-2xl shadow-slate-950/20 sm:max-h-[calc(100vh-48px)] sm:max-w-[calc(100vw-48px)] sm:rounded-[28px] sm:p-5">
             <button
               type="button"
               aria-label="Close auth modal"

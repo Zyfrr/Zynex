@@ -3,6 +3,7 @@ import { authConfigDefaults } from "../../config/authConfig";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { authService } from "./auth.service";
 import {
+  authLookupSchema,
   emailStartSchema,
   emailVerifySchema,
   loginSchema,
@@ -13,6 +14,18 @@ import {
 } from "./auth.schema";
 
 export const authRouter = Router();
+
+authRouter.post(
+  "/ZyNexAPI01AuthLookup",
+  asyncHandler(async (req, res) => {
+    const body = authLookupSchema.parse(req.body);
+    const result = await authService.lookupIdentifier(body.identifier, body.countryCode);
+    res.json({
+      success: true,
+      data: result
+    });
+  })
+);
 
 authRouter.post(
   "/ZyNexAPI01AuthRegisterManual",
@@ -33,7 +46,10 @@ authRouter.post(
   "/ZyNexAPI01AuthLogin",
   asyncHandler(async (req, res) => {
     const body = loginSchema.parse(req.body);
-    const session = await authService.loginPassword(body.email, body.password, res);
+    const session = await authService.loginPassword(body.email, body.password, res, {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent")
+    });
     res.json({
       success: true,
       data: {
@@ -60,7 +76,10 @@ authRouter.post(
   "/ZyNexAPI01AuthEmailVerify",
   asyncHandler(async (req, res) => {
     const body = emailVerifySchema.parse(req.body);
-    const session = await authService.verifyEmailCode(body.email, body.code, body.purpose, res);
+    const session = await authService.verifyEmailCode(body.email, body.code, body.purpose, res, {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent")
+    });
     res.json({
       success: true,
       data: {
@@ -88,7 +107,10 @@ authRouter.post(
   "/ZyNexAPI01AuthPhoneVerify",
   asyncHandler(async (req, res) => {
     const body = phoneVerifySchema.parse(req.body);
-    const session = await authService.verifyPhoneCode(body.countryCode, body.phoneNumber, body.code, body.purpose, res);
+    const session = await authService.verifyPhoneCode(body.countryCode, body.phoneNumber, body.code, body.purpose, res, {
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent")
+    });
     res.json({
       success: true,
       data: {

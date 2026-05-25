@@ -17,6 +17,11 @@ export const loginSchema = z.object({
   password: z.string().min(8)
 });
 
+export const authLookupSchema = z.object({
+  identifier: z.string().min(3),
+  countryCode: z.string().regex(/^\+\d{1,4}$/).default("+91").optional()
+});
+
 export const emailStartSchema = z.object({
   email: z.string().email(),
   purpose: z.enum(["LOGIN", "SIGNUP", "PASSWORD_RESET"]).default("LOGIN")

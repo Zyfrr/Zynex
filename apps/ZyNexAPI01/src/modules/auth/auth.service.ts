@@ -31,7 +31,37 @@ function setAuthCookies(res: Response, accessToken: string, refreshToken: string
   res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, maxAge: 30 * 24 * 60 * 60 * 1000 });
 }
 
+function getDeliveryErrorDetails(error: unknown) {
+  const candidate = error as { code?: unknown; status?: unknown; moreInfo?: unknown };
+  return {
+    reason: error instanceof Error ? error.message : "Unknown delivery failure",
+    code: candidate?.code,
+    status: candidate?.status,
+    moreInfo: candidate?.moreInfo
+  };
+}
+
 export class AuthService {
+  async lookupIdentifier(identifier: string, countryCode = "+91") {
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedIdentifier);
+    const digits = normalizedIdentifier.replace(/\D/g, "");
+    const user = isEmail
+      ? await prisma.user.findUnique({ where: { email: normalizedIdentifier }, include: { profile: true } })
+      : await prisma.user.findUnique({ where: { phoneNumber: digits }, include: { profile: true } });
+
+    return {
+      identifierType: isEmail ? "EMAIL" : "PHONE",
+      identifier: isEmail ? normalizedIdentifier : `${countryCode}${digits}`,
+      email: isEmail ? normalizedIdentifier : undefined,
+      countryCode: isEmail ? undefined : countryCode,
+      phoneNumber: isEmail ? undefined : digits,
+      accountExists: Boolean(user),
+      profileComplete: Boolean(user?.profile),
+      recommendedPurpose: user ? "LOGIN" : "SIGNUP"
+    };
+  }
+
   async startEmailCode(email: string, purpose: "LOGIN" | "SIGNUP" | "PASSWORD_RESET") {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (purpose === "SIGNUP" && existingUser) {
@@ -65,15 +95,21 @@ export class AuthService {
     try {
       delivery = await emailService.sendVerificationCode(email, code);
     } catch (error) {
-      throw new AppError(ErrorCode.DELIVERY_FAILED, "Unable to send email verification code. Please check SMTP settings.", 502, {
-        provider: "SPACESHIP_SMTP",
-        reason: error instanceof Error ? error.message : "Unknown email delivery failure"
+      throw new AppError(ErrorCode.DELIVERY_FAILED, "Unable to send email verification code. Please check email provider settings.", 502, {
+        provider: env.RESEND_API_KEY ? "RESEND" : "SPACESHIP_SMTP",
+        ...getDeliveryErrorDetails(error)
       });
     }
     return { identifier: email, purpose, digits, expiresInMinutes: expiresMinutes, resendCooldownSeconds: cooldownSeconds, delivery };
   }
 
-  async verifyEmailCode(email: string, code: string, purpose: "LOGIN" | "SIGNUP", res: Response) {
+  async verifyEmailCode(
+    email: string,
+    code: string,
+    purpose: "LOGIN" | "SIGNUP",
+    res: Response,
+    context?: { ipAddress?: string; userAgent?: string }
+  ) {
     const verification = await prisma.verificationCode.findFirst({
       where: { identifier: email, purpose, status: "PENDING" },
       orderBy: { createdAt: "desc" }
@@ -116,6 +152,9 @@ export class AuthService {
     await prisma.user.update({ where: { id: user.id }, data: { statusCode: "01", lastLoginAt: new Date() } });
 
     const session = await this.createSession(user.id, email, res);
+    emailService.sendLoginNotice(email, { name: user.name, ...context }).catch((error) => {
+      console.warn("[ZyNex Email] Login notice failed", error);
+    });
     return { user: { id: session.userId, email: session.email }, accessToken: session.accessToken };
   }
 
@@ -148,11 +187,26 @@ export class AuthService {
       }
     });
 
-    const delivery = await smsService.sendVerificationCode(identifier, code);
+    let delivery;
+    try {
+      delivery = await smsService.sendVerificationCode(identifier, code);
+    } catch (error) {
+      throw new AppError(ErrorCode.DELIVERY_FAILED, "Unable to send phone verification code. Please check SMS provider settings.", 502, {
+        provider: "TWILIO",
+        ...getDeliveryErrorDetails(error)
+      });
+    }
     return { identifier, digits, expiresInMinutes: expiresMinutes, delivery };
   }
 
-  async verifyPhoneCode(countryCode: string, phoneNumber: string, code: string, purpose: "LOGIN" | "SIGNUP", res: Response) {
+  async verifyPhoneCode(
+    countryCode: string,
+    phoneNumber: string,
+    code: string,
+    purpose: "LOGIN" | "SIGNUP",
+    res: Response,
+    context?: { ipAddress?: string; userAgent?: string }
+  ) {
     const identifier = `${countryCode}${phoneNumber}`;
     const verification = await prisma.verificationCode.findFirst({
       where: { identifier, purpose: "PHONE_LOGIN", status: "PENDING" },
@@ -192,6 +246,11 @@ export class AuthService {
     await prisma.user.update({ where: { id: user.id }, data: { phoneCountryCode: countryCode, statusCode: "01", lastLoginAt: new Date() } });
 
     const session = await this.createSession(user.id, user.email, res);
+    if (user.email) {
+      emailService.sendLoginNotice(user.email, { name: user.name, ...context }).catch((error) => {
+        console.warn("[ZyNex Email] Login notice failed", error);
+      });
+    }
     return { user: { id: session.userId, email: session.email }, accessToken: session.accessToken };
   }
 
@@ -263,19 +322,41 @@ export class AuthService {
       data: { userId: user.id, termsVersion: "2026-05", privacyVersion: "2026-05" }
     });
 
-    return this.createSession(user.id, input.email ?? null, res);
+    const session = await this.createSession(user.id, input.email ?? null, res);
+    if (user.email) {
+      emailService.sendWelcomeEmail(user.email, user.name).catch((error) => {
+        console.warn("[ZyNex Email] Welcome email failed", error);
+      });
+    }
+    return session;
   }
 
-  async loginPassword(email: string, password: string, res: Response) {
+  async loginPassword(email: string, password: string, res: Response, context?: { ipAddress?: string; userAgent?: string }) {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user?.passwordHash) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid credentials", 401);
     const valid = await verifySecret(user.passwordHash, password);
     if (!valid) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid credentials", 401);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), statusCode: "01" } });
-    return this.createSession(user.id, email, res);
+    const session = await this.createSession(user.id, email, res);
+    emailService.sendLoginNotice(email, { name: user.name, ...context }).catch((error) => {
+      console.warn("[ZyNex Email] Login notice failed", error);
+    });
+    return session;
   }
 
   async createSession(userId: string, email: string | null, res: Response) {
+    const activeSessions = await prisma.session.findMany({
+      where: { userId, statusCode: "01", expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+      skip: 1
+    });
+    if (activeSessions.length) {
+      await prisma.session.updateMany({
+        where: { id: { in: activeSessions.map((session) => session.id) } },
+        data: { statusCode: "09", revokedAt: new Date() }
+      });
+    }
+
     const session = await prisma.session.create({
       data: {
         userId,

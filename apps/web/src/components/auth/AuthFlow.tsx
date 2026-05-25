@@ -11,6 +11,7 @@ import {
   EyeOff,
   Info,
   KeyRound,
+  Loader2,
   Mail,
   Phone,
   ShieldCheck,
@@ -26,6 +27,16 @@ type AuthMode = "login" | "signup";
 type AuthStep = "start" | "code" | "password" | "profile" | "phone";
 type ToastState = { type: "success" | "error"; code: string; message: string };
 type FieldErrors = Record<string, string>;
+type AuthPurpose = "LOGIN" | "SIGNUP";
+type AuthLookup = {
+  identifierType: "EMAIL" | "PHONE";
+  email?: string;
+  countryCode?: string;
+  phoneNumber?: string;
+  accountExists: boolean;
+  profileComplete: boolean;
+  recommendedPurpose: AuthPurpose;
+};
 type VerifiedSignup = {
   signupVerificationToken?: string;
   email?: string;
@@ -52,10 +63,12 @@ export function AuthFlow({
   const [phoneNumber, setPhoneNumber] = useState("");
   const [shakeHint, setShakeHint] = useState(false);
   const [verifiedSignup, setVerifiedSignup] = useState<VerifiedSignup>({});
-  const isSignup = mode === "signup";
+  const [emailPurpose, setEmailPurpose] = useState<AuthPurpose>(mode === "signup" ? "SIGNUP" : "LOGIN");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const isSignup = emailPurpose === "SIGNUP";
   const isProfile = step === "profile";
 
-  async function startEmailCode(nextStep: AuthStep = "code") {
+  async function startEmailCode(nextStep: AuthStep = "code", purpose: AuthPurpose = emailPurpose) {
     if (!emailPattern.test(email)) {
       notify({ type: "error", code: "VAL001", message: "Enter a valid email address." });
       pulseHint(setShakeHint);
@@ -63,22 +76,59 @@ export function AuthFlow({
     }
 
     try {
+      setEmailLoading(true);
       await zynexApi("/api/v1/auth/ZyNexAPI01AuthEmailStart", {
         method: "POST",
-        body: JSON.stringify({ email, purpose: isSignup ? "SIGNUP" : "LOGIN" })
+        body: JSON.stringify({ email, purpose })
       });
       notify({ type: "success", code: "OTP001", message: "Verification code sent." });
+      setEmailPurpose(purpose);
       setStep(nextStep);
     } catch (err) {
       showError(err);
       pulseHint(setShakeHint);
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  async function continueWithEmail() {
+    if (!emailPattern.test(email)) {
+      notify({ type: "error", code: "VAL001", message: "Enter a valid email address." });
+      pulseHint(setShakeHint);
+      return;
+    }
+
+    try {
+      setEmailLoading(true);
+      const lookup = await zynexApi<AuthLookup>("/api/v1/auth/ZyNexAPI01AuthLookup", {
+        method: "POST",
+        body: JSON.stringify({ identifier: email })
+      });
+      const purpose = lookup.accountExists ? "LOGIN" : "SIGNUP";
+      await zynexApi("/api/v1/auth/ZyNexAPI01AuthEmailStart", {
+        method: "POST",
+        body: JSON.stringify({ email, purpose })
+      });
+      setEmailPurpose(purpose);
+      notify({
+        type: "success",
+        code: purpose === "LOGIN" ? "OTP_LOGIN_SENT" : "OTP_SIGNUP_SENT",
+        message: purpose === "LOGIN" ? "Login code sent." : "Signup verification code sent."
+      });
+      setStep("code");
+    } catch (err) {
+      showError(err);
+      pulseHint(setShakeHint);
+    } finally {
+      setEmailLoading(false);
     }
   }
 
   return (
     <main className={`${compact ? "" : "min-h-screen bg-[#F7F8FB] px-3 py-4 sm:px-5 sm:py-8"} text-[#111827]`}>
       <div className={`mx-auto flex ${compact ? "" : "min-h-[calc(100vh-32px)] max-w-6xl sm:min-h-[calc(100vh-64px)]"} items-center justify-center`}>
-        <section className={`grid w-full overflow-visible bg-white ${compact ? "" : "rounded-[20px] border border-[#E8EEF7] shadow-[0_28px_90px_rgba(15,36,66,0.10)] sm:rounded-[28px] lg:grid-cols-[0.9fr_1.1fr]"}`}>
+        <section className={`grid overflow-visible bg-white ${compact ? (isProfile ? "w-[min(620px,calc(100vw-48px))]" : "w-[min(420px,calc(100vw-48px))]") : "w-full rounded-[20px] border border-[#E8EEF7] shadow-[0_28px_90px_rgba(15,36,66,0.10)] sm:rounded-[28px] lg:grid-cols-[0.9fr_1.1fr]"}`}>
           {!compact && (
             <aside className="hidden border-r border-[#E8EEF7] bg-[#FAFBFF] p-10 lg:block">
               <Link href="/" className="flex items-center gap-3">
@@ -110,7 +160,7 @@ export function AuthFlow({
           )}
 
           <div className={compact ? "p-1" : "p-4 sm:p-6 lg:p-10"}>
-            <div className={`mx-auto w-full ${isProfile ? "max-w-3xl" : "max-w-md"}`}>
+            <div className={`mx-auto w-full ${isProfile ? "max-w-[620px]" : "max-w-[420px]"}`}>
               {step !== "start" && (
                 <button
                   type="button"
@@ -127,10 +177,11 @@ export function AuthFlow({
                   isSignup={isSignup}
                   email={email}
                   setEmail={setEmail}
-                  onEmailContinue={() => (isSignup ? startEmailCode("code") : setStep("password"))}
+                  onEmailContinue={continueWithEmail}
                   onCodeContinue={() => startEmailCode("code")}
                   onPhoneContinue={() => setStep("phone")}
                   shakeHint={shakeHint}
+                  loading={emailLoading}
                 />
               )}
               {step === "code" && (
@@ -144,9 +195,9 @@ export function AuthFlow({
                       verifiedEmail?: string;
                     }>("/api/v1/auth/ZyNexAPI01AuthEmailVerify", {
                       method: "POST",
-                      body: JSON.stringify({ email, code, purpose: isSignup ? "SIGNUP" : "LOGIN" })
+                      body: JSON.stringify({ email, code, purpose: emailPurpose })
                     });
-                    if (isSignup) {
+                    if (emailPurpose === "SIGNUP") {
                       setVerifiedSignup({ signupVerificationToken: session.signupVerificationToken, email: session.verifiedEmail || email });
                       notify({ type: "success", code: "AUTH_EMAIL_VERIFIED", message: "Email verified. Complete your profile." });
                       setStep("profile");
@@ -192,7 +243,8 @@ function StartStep({
   onEmailContinue,
   onCodeContinue,
   onPhoneContinue,
-  shakeHint
+  shakeHint,
+  loading
 }: {
   isSignup: boolean;
   email: string;
@@ -201,6 +253,7 @@ function StartStep({
   onCodeContinue: () => void;
   onPhoneContinue: () => void;
   shakeHint: boolean;
+  loading: boolean;
 }) {
   const [touched, setTouched] = useState(false);
   const emailError = touched && email && !emailPattern.test(email) ? "Enter a valid email address." : "";
@@ -212,7 +265,7 @@ function StartStep({
         {isSignup ? "Create your account" : "Log in to ZyNex"}
       </h2>
       <p className="mt-3 font-body text-sm leading-6 text-[#5D6A7C]">
-        Continue with a secure provider or use email. We keep the first step intentionally short.
+        Enter your email, phone, or Google account. ZyNex will automatically continue as login or signup.
       </p>
 
       <div className="mt-5 grid gap-2.5 sm:mt-6">
@@ -241,8 +294,11 @@ function StartStep({
       />
 
       <div className="mt-4 grid gap-3">
-        <Button className="w-full justify-between" arrow disabled={!email || Boolean(emailError)} onClick={onEmailContinue}>
-          Continue
+        <Button className="w-full justify-between" arrow={!loading} disabled={!email || Boolean(emailError) || loading} onClick={onEmailContinue}>
+          <span className="flex items-center gap-2">
+            {loading && <RingLoader />}
+            {loading ? "Sending OTP" : "Continue"}
+          </span>
         </Button>
         {!isSignup && (
           <button type="button" onClick={onCodeContinue} className="text-center font-body text-sm font-semibold text-[#4F46E5]">
@@ -279,6 +335,7 @@ function AuthProviderButton({ label, icon, onClick }: { label: string; icon: Rea
 function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: boolean; onContinue: (code: string) => Promise<void> }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   return (
     <>
@@ -296,18 +353,24 @@ function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: bo
       <Button
         className="mt-5 w-full justify-between"
         arrow
-        disabled={code.length < 4}
+        disabled={code.length < 4 || loading}
         onClick={async () => {
           try {
             setError("");
+            setLoading(true);
             await onContinue(code);
           } catch (err) {
             showError(err);
             setError(err instanceof Error ? err.message : "Verification failed");
+          } finally {
+            setLoading(false);
           }
         }}
       >
-        {isSignup ? "Verify and continue" : "Login"}
+        <span className="flex items-center gap-2">
+          {loading && <RingLoader />}
+          {loading ? "Verifying" : isSignup ? "Verify and continue" : "Login"}
+        </span>
       </Button>
       {error && <p className="mt-2 font-body text-xs font-semibold text-red-600">{error}</p>}
       <button className="mt-4 w-full text-center font-body text-sm font-semibold text-[#4F46E5]">Resend code</button>
@@ -327,10 +390,12 @@ function PasswordStep({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function login() {
     try {
       setError("");
+      setLoading(true);
       const session = await zynexApi<{ user: { id: string; email?: string | null } }>("/api/v1/auth/ZyNexAPI01AuthLogin", {
         method: "POST",
         body: JSON.stringify({ email, password })
@@ -340,6 +405,8 @@ function PasswordStep({
     } catch (err) {
       showError(err);
       setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -361,8 +428,11 @@ function PasswordStep({
       <div className="mt-4 flex items-center justify-between">
         <button className="font-body text-sm font-semibold text-[#4F46E5]">Forgot password?</button>
       </div>
-      <Button className="mt-5 w-full justify-between" arrow disabled={!email || !password} onClick={login}>
-        Continue
+      <Button className="mt-5 w-full justify-between" arrow={!loading} disabled={!email || !password || loading} onClick={login}>
+        <span className="flex items-center gap-2">
+          {loading && <RingLoader />}
+          {loading ? "Logging in" : "Continue"}
+        </span>
       </Button>
       {error && <p className="mt-2 font-body text-xs font-semibold text-red-600">{error}</p>}
     </>
@@ -387,6 +457,8 @@ function PhoneStep({
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<FieldErrors>({});
+  const [purpose, setPurpose] = useState<AuthPurpose>(isSignup ? "SIGNUP" : "LOGIN");
+  const [loading, setLoading] = useState(false);
 
   async function start() {
     if (!/^\d{10}$/.test(phoneNumber)) {
@@ -395,20 +467,34 @@ function PhoneStep({
     }
 
     try {
+      setLoading(true);
       setError({});
+      const lookup = await zynexApi<AuthLookup>("/api/v1/auth/ZyNexAPI01AuthLookup", {
+        method: "POST",
+        body: JSON.stringify({ identifier: phoneNumber, countryCode })
+      });
+      const nextPurpose = lookup.accountExists ? "LOGIN" : "SIGNUP";
       await zynexApi("/api/v1/auth/ZyNexAPI01AuthPhoneStart", {
         method: "POST",
-        body: JSON.stringify({ countryCode, phoneNumber, purpose: isSignup ? "SIGNUP" : "LOGIN" })
+        body: JSON.stringify({ countryCode, phoneNumber, purpose: nextPurpose })
       });
-      notify({ type: "success", code: "OTP001", message: "Verification code sent." });
+      setPurpose(nextPurpose);
+      notify({
+        type: "success",
+        code: nextPurpose === "LOGIN" ? "OTP_LOGIN_SENT" : "OTP_SIGNUP_SENT",
+        message: nextPurpose === "LOGIN" ? "Login code sent." : "Signup verification code sent."
+      });
       setCodeSent(true);
     } catch (err) {
       showError(err);
+    } finally {
+      setLoading(false);
     }
   }
 
   async function verify() {
     try {
+      setLoading(true);
       setError({});
       const session = await zynexApi<{
         user?: { id: string; email?: string | null };
@@ -416,9 +502,9 @@ function PhoneStep({
         verifiedPhone?: { countryCode: string; phoneNumber: string };
       }>("/api/v1/auth/ZyNexAPI01AuthPhoneVerify", {
         method: "POST",
-        body: JSON.stringify({ countryCode, phoneNumber, code, purpose: isSignup ? "SIGNUP" : "LOGIN" })
+        body: JSON.stringify({ countryCode, phoneNumber, code, purpose })
       });
-      if (isSignup) {
+      if (purpose === "SIGNUP") {
         notify({ type: "success", code: "AUTH_PHONE_VERIFIED", message: "Phone verified. Complete your profile." });
         onVerifiedSignup({
           signupVerificationToken: session.signupVerificationToken,
@@ -431,6 +517,8 @@ function PhoneStep({
       }
     } catch (err) {
       showError(err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -441,17 +529,15 @@ function PhoneStep({
       <p className="mt-3 font-body text-sm leading-6 text-[#5D6A7C]">
         India is selected by default. Enter your mobile number to receive an OTP.
       </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-[112px_1fr]">
-        <TextField icon={<span className="font-body text-xs font-bold">IN</span>} label="Country" value="India (+91)" onChange={() => {}} disabled />
-        <TextField
-          icon={<Phone size={18} />}
-          label="Phone number"
-          value={phoneNumber}
-          onChange={(value) => setPhoneNumber(value.replace(/\D/g, "").slice(0, 10))}
-          placeholder="9876543210"
-          error={error.phoneNumber}
-        />
-      </div>
+      <PhoneNumberField
+        className="mt-6"
+        label="Phone number"
+        countryCode={countryCode}
+        value={phoneNumber}
+        onChange={(value) => setPhoneNumber(value.replace(/\D/g, "").slice(0, 10))}
+        placeholder="9876543210"
+        error={error.phoneNumber}
+      />
       {codeSent && (
         <TextField
           className="mt-3"
@@ -462,8 +548,11 @@ function PhoneStep({
           placeholder="Enter OTP"
         />
       )}
-      <Button className="mt-5 w-full justify-between" arrow disabled={!phoneNumber} onClick={codeSent ? verify : start}>
-        {codeSent ? "Verify OTP" : "Send OTP"}
+      <Button className="mt-5 w-full justify-between" arrow={!loading} disabled={!phoneNumber || loading} onClick={codeSent ? verify : start}>
+        <span className="flex items-center gap-2">
+          {loading && <RingLoader />}
+          {loading ? (codeSent ? "Verifying" : "Sending OTP") : codeSent ? "Verify OTP" : "Send OTP"}
+        </span>
       </Button>
     </>
   );
@@ -489,6 +578,7 @@ function SignupProfileStep({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [loading, setLoading] = useState(false);
 
   function updateField(key: keyof typeof form, value: string | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -514,6 +604,7 @@ function SignupProfileStep({
     if (!validateProfile()) return;
 
     try {
+      setLoading(true);
       const session = await zynexApi<{ user: { id: string; email?: string | null } }>("/api/v1/auth/ZyNexAPI01AuthRegisterManual", {
         method: "POST",
         body: JSON.stringify({
@@ -532,8 +623,16 @@ function SignupProfileStep({
       onAuthenticated?.(session.user);
     } catch (err) {
       showError(err);
+      if (err instanceof ZyNexApiError && err.code === "AUTH003") {
+        notify({ type: "error", code: "AUTH_SESSION_EXPIRED", message: "Your signup session has expired. Please verify again." });
+      }
+    } finally {
+      setLoading(false);
     }
   }
+
+  const passwordReady = form.password && !getPasswordError(form.password);
+  const passwordsMatch = form.confirmPassword && form.password === form.confirmPassword;
 
   return (
     <>
@@ -545,12 +644,31 @@ function SignupProfileStep({
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField icon={<UserRound size={18} />} label="First name" value={form.firstName} onChange={(value) => updateField("firstName", value)} placeholder="Sarankumar" error={errors.firstName} />
         <TextField icon={<UserRound size={18} />} label="Last name" value={form.lastName} onChange={(value) => updateField("lastName", value)} placeholder="Sankar" error={errors.lastName} />
-        <TextField className="sm:col-span-2" icon={<Mail size={18} />} label="Email address" value={form.email} onChange={(value) => updateField("email", value)} placeholder="you@company.com" error={errors.email} disabled={Boolean(verifiedSignup.email)} />
-        <TextField className="sm:col-span-2" icon={<Phone size={18} />} label="Phone number" value={form.phoneNumber} onChange={(value) => updateField("phoneNumber", value.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210" error={errors.phoneNumber} disabled={Boolean(verifiedSignup.phoneNumber)} />
+        <TextField icon={<Mail size={18} />} label="Email address" value={form.email} onChange={(value) => updateField("email", value)} placeholder="you@company.com" error={errors.email} disabled={Boolean(verifiedSignup.email)} verified={Boolean(verifiedSignup.email)} />
+        <PhoneNumberField
+          label="Phone number"
+          countryCode="+91"
+          value={form.phoneNumber}
+          onChange={(value) => updateField("phoneNumber", value.replace(/\D/g, "").slice(0, 10))}
+          placeholder="9876543210"
+          error={errors.phoneNumber}
+          disabled={Boolean(verifiedSignup.phoneNumber)}
+          verified={Boolean(verifiedSignup.phoneNumber)}
+        />
         <DatePickerField value={form.dateOfBirth} onChange={(value) => updateField("dateOfBirth", value)} error={errors.dateOfBirth} />
-        <TextField icon={<span className="font-body text-xs font-bold">IN</span>} label="Country" value="India (+91)" onChange={() => {}} disabled />
+        <TextField icon={<span className="font-body text-xs font-bold">IN</span>} label="Country" value="India" onChange={() => {}} disabled />
         <PasswordField className="sm:col-span-2" label="Create password" value={form.password} onChange={(value) => updateField("password", value)} placeholder="Create a strong password" visible={showPassword} setVisible={setShowPassword} error={errors.password} showGuidelines />
+        {form.password && (
+          <p className={`-mt-2 sm:col-span-2 font-body text-xs font-semibold ${passwordReady ? "text-emerald-600" : "text-red-600"}`}>
+            {passwordReady ? "Password strength looks good." : getPasswordError(form.password)}
+          </p>
+        )}
         <PasswordField className="sm:col-span-2" label="Confirm password" value={form.confirmPassword} onChange={(value) => updateField("confirmPassword", value)} placeholder="Re-enter your password" visible={showConfirmPassword} setVisible={setShowConfirmPassword} error={errors.confirmPassword} />
+        {form.confirmPassword && (
+          <p className={`-mt-2 sm:col-span-2 font-body text-xs font-semibold ${passwordsMatch ? "text-emerald-600" : "text-red-600"}`}>
+            {passwordsMatch ? "Password is matched." : "Password is not matching."}
+          </p>
+        )}
       </div>
 
       <label className="mt-3 flex gap-3 rounded-2xl border border-[#E8EEF7] bg-[#FAFBFF] p-3">
@@ -567,8 +685,11 @@ function SignupProfileStep({
         </span>
       </label>
 
-      <Button className="mt-4 w-full justify-between" arrow onClick={register}>
-        Create account
+      <Button className="mt-4 w-full justify-between" arrow={!loading} disabled={loading} onClick={register}>
+        <span className="flex items-center gap-2">
+          {loading && <RingLoader />}
+          {loading ? "Creating account" : "Create account"}
+        </span>
       </Button>
     </>
   );
@@ -582,6 +703,7 @@ function TextField({
   placeholder,
   error,
   disabled = false,
+  verified = false,
   onBlur,
   className = ""
 }: {
@@ -592,6 +714,7 @@ function TextField({
   placeholder?: string;
   error?: string;
   disabled?: boolean;
+  verified?: boolean;
   onBlur?: () => void;
   className?: string;
 }) {
@@ -608,7 +731,50 @@ function TextField({
           disabled={disabled}
           className="h-full min-w-0 flex-1 bg-transparent font-body text-sm outline-none placeholder:text-[#A1AAB8] disabled:text-[#6B7280]"
         />
+        {verified && <CheckCircle2 size={17} className="shrink-0 text-emerald-500" />}
       </div>
+      {verified && <p className="mt-1 font-body text-xs font-semibold text-emerald-600">{label} is verified.</p>}
+      {error && <p className="mt-1 font-body text-xs font-semibold text-red-600">{error}</p>}
+    </label>
+  );
+}
+
+function PhoneNumberField({
+  label,
+  countryCode,
+  value,
+  onChange,
+  placeholder,
+  error,
+  disabled = false,
+  verified = false,
+  className = ""
+}: {
+  label: string;
+  countryCode: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  error?: string;
+  disabled?: boolean;
+  verified?: boolean;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="font-body text-xs font-semibold text-[#253248] sm:text-sm">{label}</span>
+      <div className={`mt-1.5 flex h-11 items-center rounded-2xl border ${error ? "border-red-300" : "border-[#DDE5F0] focus-within:border-[#4F46E5]"} ${disabled ? "bg-[#F8FAFC]" : "bg-white"}`}>
+        <span className="flex h-full shrink-0 items-center border-r border-[#E8EEF7] px-3 font-body text-sm font-bold text-[#253248]">{countryCode}</span>
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="h-full min-w-0 flex-1 bg-transparent px-3 font-body text-sm outline-none placeholder:text-[#A1AAB8] disabled:text-[#6B7280]"
+        />
+        {verified && <CheckCircle2 size={17} className="mr-3 shrink-0 text-emerald-500" />}
+      </div>
+      {verified && <p className="mt-1 font-body text-xs font-semibold text-emerald-600">Phone number is verified.</p>}
       {error && <p className="mt-1 font-body text-xs font-semibold text-red-600">{error}</p>}
     </label>
   );
@@ -676,8 +842,12 @@ function DatePickerField({ value, onChange, error }: { value: string; onChange: 
   const selectedDate = value ? new Date(`${value}T00:00:00`) : null;
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(selectedDate || today);
+  const [pickerView, setPickerView] = useState<"days" | "months" | "years">("days");
   const monthLabel = viewDate.toLocaleString("en", { month: "long", year: "numeric" });
   const days = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
+  const yearBlockStart = Math.floor(viewDate.getFullYear() / 12) * 12;
+  const canGoNextMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1) <= new Date(today.getFullYear(), today.getMonth(), 1);
+  const canGoNextYearBlock = yearBlockStart + 12 <= today.getFullYear();
 
   function selectDate(date: Date) {
     if (date > today) return;
@@ -701,41 +871,112 @@ function DatePickerField({ value, onChange, error }: { value: string; onChange: 
       {open && (
         <div className="absolute left-0 right-0 top-[72px] z-30 rounded-2xl border border-[#E8EEF7] bg-white p-3 shadow-2xl shadow-slate-900/15 sm:right-auto sm:w-[310px]">
           <div className="flex items-center justify-between">
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-[#F3F5FA]">
+            <button
+              type="button"
+              onClick={() => {
+                if (pickerView === "years") setViewDate(new Date(viewDate.getFullYear() - 12, viewDate.getMonth(), 1));
+                else setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full hover:bg-[#F3F5FA]"
+            >
               <ChevronLeft size={17} />
             </button>
-            <span className="font-body text-sm font-bold text-[#253248]">{monthLabel}</span>
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-[#F3F5FA]">
+            <button
+              type="button"
+              onClick={() => setPickerView(pickerView === "days" ? "months" : "years")}
+              className="rounded-full px-3 py-1 font-body text-sm font-bold text-[#253248] hover:bg-[#F3F5FA]"
+            >
+              {pickerView === "years" ? `${yearBlockStart} - ${yearBlockStart + 11}` : monthLabel}
+            </button>
+            <button
+              type="button"
+              disabled={pickerView === "years" ? !canGoNextYearBlock : !canGoNextMonth}
+              onClick={() => {
+                if (pickerView === "years") setViewDate(new Date(viewDate.getFullYear() + 12, viewDate.getMonth(), 1));
+                else if (canGoNextMonth) setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full hover:bg-[#F3F5FA] disabled:cursor-not-allowed disabled:text-[#C6CEDA] disabled:hover:bg-transparent"
+            >
               <ChevronRight size={17} />
             </button>
           </div>
-          <div className="mt-3 grid grid-cols-7 gap-1 text-center font-body text-[11px] font-bold text-[#8A94A6]">
-            {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
-          </div>
-          <div className="mt-1 grid grid-cols-7 gap-1">
-            {days.map((date, index) => {
-              if (!date) return <span key={`empty-${index}`} className="h-8" />;
-              const disabled = date > today;
-              const active = value === formatDate(date);
-              return (
-                <button
-                  key={date.toISOString()}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => selectDate(date)}
-                  className={`h-8 rounded-full font-body text-xs font-semibold transition ${
-                    active
-                      ? "bg-[#4F46E5] text-white"
-                      : disabled
-                        ? "cursor-not-allowed text-[#C6CEDA]"
-                        : "text-[#253248] hover:bg-indigo-50 hover:text-[#4F46E5]"
-                  }`}
-                >
-                  {date.getDate()}
-                </button>
-              );
-            })}
-          </div>
+
+          {pickerView === "years" && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {Array.from({ length: 12 }, (_, index) => yearBlockStart + index).map((year) => {
+                const disabled = year > today.getFullYear();
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setViewDate(new Date(year, Math.min(viewDate.getMonth(), today.getMonth()), 1));
+                      setPickerView("months");
+                    }}
+                    className="h-10 rounded-xl font-body text-sm font-semibold text-[#253248] hover:bg-indigo-50 hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:text-[#C6CEDA] disabled:hover:bg-transparent"
+                  >
+                    {year}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {pickerView === "months" && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {Array.from({ length: 12 }, (_, month) => {
+                const monthDate = new Date(viewDate.getFullYear(), month, 1);
+                const disabled = monthDate > new Date(today.getFullYear(), today.getMonth(), 1);
+                return (
+                  <button
+                    key={month}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setViewDate(new Date(viewDate.getFullYear(), month, 1));
+                      setPickerView("days");
+                    }}
+                    className="h-10 rounded-xl font-body text-sm font-semibold text-[#253248] hover:bg-indigo-50 hover:text-[#4F46E5] disabled:cursor-not-allowed disabled:text-[#C6CEDA] disabled:hover:bg-transparent"
+                  >
+                    {new Date(2026, month, 1).toLocaleString("en", { month: "short" })}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {pickerView === "days" && (
+            <>
+              <div className="mt-3 grid grid-cols-7 gap-1 text-center font-body text-[11px] font-bold text-[#8A94A6]">
+                {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {days.map((date, index) => {
+                  if (!date) return <span key={`empty-${index}`} className="h-8" />;
+                  const disabled = date > today;
+                  const active = value === formatDate(date);
+                  return (
+                    <button
+                      key={date.toISOString()}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => selectDate(date)}
+                      className={`h-8 rounded-full font-body text-xs font-semibold transition ${
+                        active
+                          ? "bg-[#4F46E5] text-white"
+                          : disabled
+                            ? "cursor-not-allowed text-[#C6CEDA]"
+                            : "text-[#253248] hover:bg-indigo-50 hover:text-[#4F46E5]"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -749,6 +990,10 @@ function getPasswordError(password: string) {
   if (!/\d/.test(password)) return "Password must include at least one number.";
   if (!/[^A-Za-z0-9]/.test(password)) return "Password must include at least one special character.";
   return "";
+}
+
+function RingLoader() {
+  return <Loader2 size={16} className="animate-spin" aria-hidden="true" />;
 }
 
 function buildCalendarDays(baseDate: Date) {
