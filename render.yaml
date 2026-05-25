@@ -29,6 +29,10 @@ services:
         sync: false
       - key: ZYNEX_SUPPORT_EMAIL
         value: support@zyfrr.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ZYNEX_EMAIL_FROM
+        value: ZyNex Support <support@zyfrr.com>
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

@@ -14,6 +14,8 @@ const envSchema = z.object({
   SPACESHIP_SMTP_USER: z.string().default("support@zyfrr.com"),
   SPACESHIP_SMTP_PASS: z.string().optional(),
   ZYNEX_SUPPORT_EMAIL: z.string().default("support@zyfrr.com"),
+  RESEND_API_KEY: z.string().optional(),
+  ZYNEX_EMAIL_FROM: z.string().default("ZyNex Support <support@zyfrr.com>"),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM_PHONE: z.string().optional()
