@@ -88,8 +88,8 @@ export function ChatWorkspace() {
         />
       </div>
       {authMode && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-3 py-3 backdrop-blur-sm sm:px-4">
-          <div className="relative max-h-[94dvh] w-full max-w-[520px] overflow-y-auto rounded-[20px] border border-[#E8EEF7] bg-white p-4 shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-6">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-2 py-2 backdrop-blur-sm sm:px-4">
+          <div className="relative w-full max-w-[min(94vw,860px)] rounded-[18px] border border-[#E8EEF7] bg-white p-3 shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-5">
             <button
               type="button"
               aria-label="Close auth modal"
