@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { authService } from "./auth.service";
 import {
   authLookupSchema,
+  changePasswordSchema,
   deleteAccountSchema,
   emailStartSchema,
   emailVerifySchema,
@@ -141,9 +142,11 @@ authRouter.post(
   "/ZyNexAPI01AuthPasswordResetStart",
   asyncHandler(async (req, res) => {
     const body = passwordResetStartSchema.parse(req.body);
+    const result = await authService.startPasswordReset(body.email);
     res.status(202).json({
       success: true,
       data: {
+        ...result,
         identifier: body.email,
         sender: authConfigDefaults.supportSenderEmail,
         expiresInMinutes: authConfigDefaults.passwordResetExpiresMinutes
@@ -234,6 +237,18 @@ authRouter.delete(
     if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
     const body = deleteAccountSchema.parse(req.body);
     const result = await authService.deleteAccount(userId, body.confirmation);
+    authService.clearSessionCookies(res);
+    res.json({ success: true, data: result });
+  })
+);
+
+authRouter.post(
+  "/ZyNexAPI01AuthChangePassword",
+  asyncHandler(async (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
+    const body = changePasswordSchema.parse(req.body);
+    const result = await authService.changePassword(userId, body.currentPassword, body.newPassword);
     authService.clearSessionCookies(res);
     res.json({ success: true, data: result });
   })

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { X } from "lucide-react";
 import { AuthFlow } from "@/components/auth/AuthFlow";
 import { ChatMain } from "@/components/chat/ChatMain";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { zynexApi } from "@/lib/api";
 
 type WorkspaceUser = {
   id?: string;
   name?: string | null;
   email?: string | null;
   image?: string | null;
+  profile?: { firstName?: string | null; lastName?: string | null; avatarUrl?: string | null } | null;
 };
 
 export function ChatWorkspace() {
@@ -29,6 +31,26 @@ export function ChatWorkspace() {
   const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
   const activeUser = user ?? session?.user ?? null;
+
+  async function refreshProfile() {
+    try {
+      const apiUser = await zynexApi<WorkspaceUser | null>("/api/v1/auth/ZyNexAPI01AuthMe");
+      if (apiUser) {
+        const profileName = [apiUser.profile?.firstName, apiUser.profile?.lastName].filter(Boolean).join(" ");
+        setUser({
+          ...apiUser,
+          name: profileName || apiUser.name || apiUser.email,
+          image: apiUser.profile?.avatarUrl || apiUser.image
+        });
+      }
+    } catch {
+      if (!session?.user) setUser(null);
+    }
+  }
+
+  useEffect(() => {
+    if (session?.user || user) void refreshProfile();
+  }, [session?.user?.email]);
 
   function openAuth(nextMode: "login" | "signup") {
     setAuthMode(nextMode);
@@ -103,6 +125,7 @@ export function ChatWorkspace() {
               compact
               onAuthenticated={(nextUser) => {
                 setUser(nextUser);
+                window.setTimeout(() => void refreshProfile(), 150);
                 closeAuth();
               }}
             />

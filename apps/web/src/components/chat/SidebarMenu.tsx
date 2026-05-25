@@ -103,14 +103,18 @@ export function ListRow({
 export function MenuAction({
   icon,
   label,
-  danger = false
+  danger = false,
+  onClick
 }: {
   icon: ReactNode;
   label: string;
   danger?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
+      type="button"
+      onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 font-body text-xs font-semibold ${
         danger ? "text-red-600 hover:bg-red-50" : "text-[#4C596C] hover:bg-[#F3F5FA] hover:text-[#4F46E5]"
       }`}

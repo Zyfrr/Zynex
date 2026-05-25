@@ -15,11 +15,11 @@ export type SignupVerificationTokenPayload = {
 };
 
 export function signAccessToken(payload: AuthTokenPayload) {
-  return jwt.sign(payload, env.ZYNEX_JWT_SECRET, { expiresIn: "30m" });
+  return jwt.sign(payload, env.ZYNEX_JWT_SECRET, { expiresIn: "72h" });
 }
 
 export function signRefreshToken(payload: AuthTokenPayload) {
-  return jwt.sign(payload, env.ZYNEX_JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign(payload, env.ZYNEX_JWT_SECRET, { expiresIn: "72h" });
 }
 
 export function verifyAccessToken(token: string) {

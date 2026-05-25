@@ -215,12 +215,10 @@ export function ChatSidebar({
       <div className="relative shrink-0 border-t border-[#E8EEF7] p-2.5">
         {authenticated && profileOpen && !collapsed && (
           <div className="absolute bottom-[70px] left-2.5 right-2.5 z-30 rounded-xl border border-[#E8EEF7] bg-white p-1.5 shadow-2xl shadow-slate-900/12">
-            <MenuAction icon={<User size={15} />} label="Profile" />
-            <MenuAction icon={<Settings size={15} />} label="Settings" />
-            <MenuAction icon={<Sparkles size={15} />} label="Dashboard" />
-            <button type="button" onClick={logout} className="w-full">
-              <MenuAction icon={<LogOut size={15} />} label="Logout" danger />
-            </button>
+            <MenuAction icon={<User size={15} />} label="Profile" onClick={() => { window.location.href = "/dashboard?zx=mp_%25x9"; }} />
+            <MenuAction icon={<Settings size={15} />} label="Settings" onClick={() => { window.location.href = "/dashboard?zx=st_%25x9"; }} />
+            <MenuAction icon={<Sparkles size={15} />} label="Dashboard" onClick={() => { window.location.href = "/dashboard"; }} />
+            <MenuAction icon={<LogOut size={15} />} label="Logout" danger onClick={logout} />
           </div>
         )}
         <button

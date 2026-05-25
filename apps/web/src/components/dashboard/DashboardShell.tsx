@@ -116,6 +116,27 @@ const navItems: Array<{ id: DashboardPage; label: string; icon: React.ReactNode 
   { id: "settings", label: "Settings", icon: <Layers3 size={18} /> }
 ];
 
+const dashboardCodes: Record<DashboardPage, string> = {
+  overview: "ov_%x0",
+  profile: "mp_%x9",
+  conversations: "cv_%x1",
+  inference: "il_%x2",
+  providers: "pv_%x3",
+  recharge: "rc_%x4",
+  billing: "bl_%x5",
+  security: "sc_%x6",
+  sessions: "ss_%x7",
+  alerts: "al_%x8",
+  audit: "au_%xa",
+  datasets: "ds_%xb",
+  settings: "st_%x9"
+};
+
+function decodeDashboardPage(code: string | null): DashboardPage | null {
+  if (!code) return null;
+  return (Object.entries(dashboardCodes).find(([, value]) => value === code)?.[0] as DashboardPage | undefined) || null;
+}
+
 const latency = [
   { time: "09:00", avg: 312, p95: 720, errors: 3 },
   { time: "10:00", avg: 348, p95: 812, errors: 5 },
@@ -179,6 +200,20 @@ export function DashboardShell() {
   const [activePage, setActivePage] = useState<DashboardPage>("overview");
   const pageTitle = navItems.find((item) => item.id === activePage)?.label || "Dashboard";
 
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("zx");
+    const page = decodeDashboardPage(code);
+    if (page) setActivePage(page);
+  }, []);
+
+  function navigateDashboard(page: DashboardPage, mode?: string) {
+    setActivePage(page);
+    const params = new URLSearchParams();
+    params.set("zx", dashboardCodes[page]);
+    if (mode) params.set("cb", mode);
+    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F8FB] text-[#111827]">
       <div className="flex min-h-screen">
@@ -195,7 +230,7 @@ export function DashboardShell() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActivePage(item.id)}
+                onClick={() => navigateDashboard(item.id)}
                 className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left font-body text-sm font-semibold transition ${
                   activePage === item.id ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-[#475569] hover:bg-[#F8FAFC] hover:text-[#111827]"
                 }`}
@@ -215,6 +250,13 @@ export function DashboardShell() {
                 <p className="font-body text-xs font-bold uppercase text-[#4F46E5]">Production analytics</p>
                 <h1 className="font-display text-3xl font-semibold leading-none sm:text-4xl">{pageTitle}</h1>
               </div>
+              <button
+                type="button"
+                onClick={() => { window.location.href = "/workspace"; }}
+                className="rounded-full border border-[#E8EEF7] bg-white px-3 py-2 font-body text-xs font-semibold text-[#475569] hover:border-[#4F46E5] hover:text-[#4F46E5]"
+              >
+                Back to workspace
+              </button>
               <div className="flex items-center gap-2 rounded-full border border-[#E8EEF7] bg-[#F8FAFC] px-3 py-2 font-body text-xs font-semibold text-[#475569]">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 Live workspace
@@ -225,7 +267,7 @@ export function DashboardShell() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActivePage(item.id)}
+                  onClick={() => navigateDashboard(item.id)}
                   className={`shrink-0 rounded-full border px-3 py-2 font-body text-xs font-semibold ${
                     activePage === item.id ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5]" : "border-[#E8EEF7] bg-white text-[#475569]"
                   }`}
@@ -238,7 +280,7 @@ export function DashboardShell() {
 
           <div className="p-4 sm:p-6">
             {activePage === "overview" && <OverviewPage />}
-            {activePage === "profile" && <ProfilePage />}
+            {activePage === "profile" && <ProfilePage onEditRoute={() => navigateDashboard("profile", "ed_%25pf_cb")} />}
             {activePage === "conversations" && <StaticPage kind="conversations" />}
             {activePage === "inference" && <StaticPage kind="inference" />}
             {activePage === "providers" && <StaticPage kind="providers" />}
@@ -335,7 +377,7 @@ function OverviewPage() {
   );
 }
 
-function ProfilePage() {
+function ProfilePage({ onEditRoute }: { onEditRoute: () => void }) {
   const { data: session } = useSession();
   const [user, setUser] = useState<ApiUser | null>(null);
   const [editing, setEditing] = useState(false);
@@ -345,6 +387,8 @@ function ProfilePage() {
   const [otp, setOtp] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
   const profile = useMemo(() => {
     const fallbackName = session?.user?.name || "ZyNex Operator";
@@ -449,6 +493,26 @@ function ProfilePage() {
     }
   }
 
+  async function changePassword() {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("Code: VAL001", { description: "Message: New password and confirm password do not match." });
+      return;
+    }
+    try {
+      await zynexApi("/api/v1/auth/ZyNexAPI01AuthChangePassword", {
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
+      });
+      toast.success("Code: PASSWORD_CHANGED", { description: "Message: Password changed. Please login again." });
+      window.location.href = "/Login";
+    } catch (error) {
+      showDashboardError(error);
+    }
+  }
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
       <Panel>
@@ -459,7 +523,13 @@ function ProfilePage() {
           </div>
           <button
             type="button"
-            onClick={() => editing ? saveProfile() : setEditing(true)}
+            onClick={() => {
+              if (editing) void saveProfile();
+              else {
+                setEditing(true);
+                onEditRoute();
+              }
+            }}
             className="inline-flex h-10 items-center gap-2 rounded-full bg-[#111827] px-4 font-body text-sm font-semibold text-white"
           >
             {editing ? <Save size={16} /> : <Edit3 size={16} />}
@@ -491,6 +561,13 @@ function ProfilePage() {
           <StatusRow label="Two active sessions max" value />
           <StatusRow label="Notification emails" value />
         </div>
+        <button
+          type="button"
+          onClick={() => setPasswordOpen(true)}
+          className="mt-5 h-10 w-full rounded-full border border-[#DDE5F0] font-body text-sm font-semibold text-[#253248] hover:border-[#4F46E5] hover:text-[#4F46E5]"
+        >
+          Change password
+        </button>
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="font-body text-sm font-bold text-red-700">Danger zone</p>
           <p className="mt-1 font-body text-xs leading-5 text-red-700/80">
@@ -557,6 +634,25 @@ function ProfilePage() {
             >
               Permanently delete my profile
             </button>
+          </div>
+        </div>
+      )}
+      {passwordOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#E8EEF7] bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-body text-xs font-bold uppercase text-[#4F46E5]">Password security</p>
+                <h3 className="font-display text-2xl font-semibold">Change password</h3>
+              </div>
+              <button type="button" onClick={() => setPasswordOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border border-[#E8EEF7]"><X size={17} /></button>
+            </div>
+            <div className="mt-5 space-y-3">
+              <ProfileInput label="Current password" value={passwordForm.currentPassword} disabled={false} onChange={(value) => setPasswordForm({ ...passwordForm, currentPassword: value })} icon={<KeyRound size={17} />} type="password" />
+              <ProfileInput label="New password" value={passwordForm.newPassword} disabled={false} onChange={(value) => setPasswordForm({ ...passwordForm, newPassword: value })} icon={<KeyRound size={17} />} type="password" />
+              <ProfileInput label="Confirm password" value={passwordForm.confirmPassword} disabled={false} onChange={(value) => setPasswordForm({ ...passwordForm, confirmPassword: value })} icon={<KeyRound size={17} />} type="password" />
+              <button type="button" onClick={changePassword} className="h-10 w-full rounded-full bg-[#4F46E5] font-body text-sm font-semibold text-white">Save password</button>
+            </div>
           </div>
         </div>
       )}

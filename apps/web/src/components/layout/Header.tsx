@@ -12,8 +12,8 @@ export function Header() {
           ZyNex
         </Link>
         <div className="hidden items-center gap-8 font-mono text-xs font-bold uppercase text-[var(--body-soft)] md:flex">
-          <Link href="/Dashboard">Dashboard</Link>
-          <Link href="/Chat">Chat</Link>
+          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/workspace">Chat</Link>
           <Link href="/Conversations">Conversations</Link>
           <Link href="/Logs">Logs</Link>
         </div>

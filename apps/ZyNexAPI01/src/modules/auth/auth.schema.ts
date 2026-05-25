@@ -73,3 +73,8 @@ export const phoneChangeVerifySchema = phoneChangeStartSchema.extend({
 export const deleteAccountSchema = z.object({
   confirmation: z.string().min(3)
 });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(8),
+  newPassword: z.string().min(8)
+});

@@ -27,8 +27,8 @@ function setAuthCookies(res: Response, accessToken: string, refreshToken: string
     path: "/"
   };
 
-  res.cookie(ACCESS_COOKIE, accessToken, { ...cookieBase, maxAge: 30 * 60 * 1000 });
-  res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, maxAge: 30 * 24 * 60 * 60 * 1000 });
+  res.cookie(ACCESS_COOKIE, accessToken, { ...cookieBase, maxAge: 72 * 60 * 60 * 1000 });
+  res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, maxAge: 72 * 60 * 60 * 1000 });
 }
 
 function getDeliveryErrorDetails(error: unknown) {
@@ -93,7 +93,7 @@ export class AuthService {
 
     let delivery;
     try {
-      delivery = await emailService.sendVerificationCode(email, code);
+      delivery = await emailService.sendVerificationCode(email, code, purpose);
     } catch (error) {
       throw new AppError(ErrorCode.DELIVERY_FAILED, "Unable to send email verification code. Please check email provider settings.", 502, {
         provider: env.RESEND_API_KEY ? "RESEND" : "SPACESHIP_SMTP",
@@ -189,7 +189,7 @@ export class AuthService {
 
     let delivery;
     try {
-      delivery = await smsService.sendVerificationCode(identifier, code);
+      delivery = await smsService.sendVerificationCode(identifier, code, purpose);
     } catch (error) {
       throw new AppError(ErrorCode.DELIVERY_FAILED, "Unable to send phone verification code. Please check SMS provider settings.", 502, {
         provider: "TWILIO",
@@ -197,6 +197,33 @@ export class AuthService {
       });
     }
     return { identifier, digits, expiresInMinutes: expiresMinutes, delivery };
+  }
+
+  async startPasswordReset(email: string) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new AppError(ErrorCode.ACCOUNT_NOT_FOUND, "This email is not registered with us. Kindly sign up.", 404);
+
+    const digits = await configService.getNumber("AuthOtpDigits");
+    const expiresMinutes = await configService.getNumber("AuthPasswordResetExpiresMinutes");
+    const maxAttempts = await configService.getNumber("AuthOtpMaxAttempts");
+    const code = generateNumericCode(digits);
+
+    await prisma.verificationCode.updateMany({
+      where: { identifier: email, purpose: "PASSWORD_RESET", status: "PENDING" },
+      data: { status: "EXPIRED" }
+    });
+    await prisma.verificationCode.create({
+      data: {
+        identifier: email,
+        codeHash: await hashOtp(code),
+        purpose: "PASSWORD_RESET",
+        maxAttempts,
+        expiresAt: addMinutes(new Date(), expiresMinutes)
+      }
+    });
+
+    const delivery = await emailService.sendVerificationCode(email, code, "PASSWORD_RESET");
+    return { identifier: email, digits, expiresInMinutes: expiresMinutes, delivery };
   }
 
   async verifyPhoneCode(
@@ -363,7 +390,7 @@ export class AuthService {
         tokenHash: await hashSecret(`${userId}:${Date.now()}:access`),
         refreshTokenHash: await hashSecret(`${userId}:${Date.now()}:refresh`),
         statusCode: "01",
-        expiresAt: addMinutes(new Date(), 60 * 24 * 30)
+        expiresAt: addMinutes(new Date(), 60 * 72)
       }
     });
     const payload = { userId, sessionId: session.id, email };
@@ -558,6 +585,24 @@ export class AuthService {
     });
 
     return { deleted: true };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Password login is not configured for this account.", 401);
+
+    const valid = await verifySecret(user.passwordHash, currentPassword);
+    if (!valid) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Current password is incorrect.", 401);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await hashSecret(newPassword) }
+    });
+    await prisma.session.updateMany({
+      where: { userId, statusCode: "01" },
+      data: { statusCode: "09", revokedAt: new Date() }
+    });
+    return { passwordChanged: true, sessionsRevoked: true };
   }
 }
 

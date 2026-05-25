@@ -3,18 +3,19 @@ import { Resend } from "resend";
 import { env } from "../../config/env";
 
 export class EmailService {
-  async sendVerificationCode(to: string, code: string) {
+  async sendVerificationCode(to: string, code: string, purpose: "LOGIN" | "SIGNUP" | "PASSWORD_RESET" = "LOGIN") {
+    const copy = getOtpCopy(purpose);
     if (env.RESEND_API_KEY) {
       const resend = new Resend(env.RESEND_API_KEY);
       const result = await resend.emails.send({
         from: env.ZYNEX_EMAIL_FROM,
         to,
-        subject: "Your ZyNex verification code",
-        text: `Your ZyNex verification code is ${code}. This code expires soon.`,
+        subject: copy.subject,
+        text: `${copy.title}: ${code}. This code expires soon.`,
         html: this.renderTemplate({
-          eyebrow: "Verification code",
-          title: "Your ZyNex OTP",
-          body: "Use this code to continue your secure ZyNex authentication flow.",
+          eyebrow: copy.eyebrow,
+          title: copy.title,
+          body: copy.body,
           code,
           footnote: "This code expires soon. If you did not request it, you can ignore this email."
         })
@@ -45,12 +46,12 @@ export class EmailService {
     await transporter.sendMail({
       from: `"ZyNex Support" <${env.SPACESHIP_SMTP_USER}>`,
       to,
-      subject: "Your ZyNex verification code",
-      text: `Your ZyNex verification code is ${code}. This code expires soon.`,
+      subject: copy.subject,
+      text: `${copy.title}: ${code}. This code expires soon.`,
       html: this.renderTemplate({
-        eyebrow: "Verification code",
-        title: "Your ZyNex OTP",
-        body: "Use this code to continue your secure ZyNex authentication flow.",
+        eyebrow: copy.eyebrow,
+        title: copy.title,
+        body: copy.body,
         code,
         footnote: "This code expires soon. If you did not request it, you can ignore this email."
       })
@@ -209,3 +210,28 @@ export class EmailService {
 }
 
 export const emailService = new EmailService();
+
+function getOtpCopy(purpose: "LOGIN" | "SIGNUP" | "PASSWORD_RESET") {
+  if (purpose === "SIGNUP") {
+    return {
+      subject: "Your ZyNex signup verification OTP",
+      eyebrow: "Signup verification",
+      title: "Your signup OTP",
+      body: "Use this code to verify your email and continue creating your ZyNex account."
+    };
+  }
+  if (purpose === "PASSWORD_RESET") {
+    return {
+      subject: "Your ZyNex password reset OTP",
+      eyebrow: "Password reset",
+      title: "Your password reset OTP",
+      body: "Use this code to continue resetting your ZyNex password."
+    };
+  }
+  return {
+    subject: "Your ZyNex login OTP",
+    eyebrow: "Login verification",
+    title: "Your login OTP",
+    body: "Use this code to securely log in to your ZyNex account."
+  };
+}

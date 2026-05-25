@@ -426,7 +426,7 @@ function PasswordStep({
         />
       </div>
       <div className="mt-4 flex items-center justify-between">
-        <button className="font-body text-sm font-semibold text-[#4F46E5]">Forgot password?</button>
+        <button type="button" onClick={() => { window.location.href = "/forgot-password"; }} className="font-body text-sm font-semibold text-[#4F46E5]">Forgot password?</button>
       </div>
       <Button className="mt-5 w-full justify-between" arrow={!loading} disabled={!email || !password || loading} onClick={login}>
         <span className="flex items-center gap-2">
