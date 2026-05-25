@@ -117,24 +117,30 @@ const navItems: Array<{ id: DashboardPage; label: string; icon: React.ReactNode 
 ];
 
 const dashboardCodes: Record<DashboardPage, string> = {
-  overview: "ov_%x0",
-  profile: "mp_%x9",
-  conversations: "cv_%x1",
-  inference: "il_%x2",
-  providers: "pv_%x3",
-  recharge: "rc_%x4",
-  billing: "bl_%x5",
-  security: "sc_%x6",
-  sessions: "ss_%x7",
-  alerts: "al_%x8",
-  audit: "au_%xa",
-  datasets: "ds_%xb",
-  settings: "st_%x9"
+  overview: "overview",
+  profile: "profile",
+  conversations: "conversations",
+  inference: "inference-logs",
+  providers: "providers",
+  recharge: "recharge",
+  billing: "billing",
+  security: "security",
+  sessions: "sessions",
+  alerts: "alerts",
+  audit: "audit-trail",
+  datasets: "datasets",
+  settings: "settings"
 };
 
 function decodeDashboardPage(code: string | null): DashboardPage | null {
   if (!code) return null;
-  return (Object.entries(dashboardCodes).find(([, value]) => value === code)?.[0] as DashboardPage | undefined) || null;
+  const legacyCodes: Record<string, DashboardPage> = {
+    "mp_%x9": "profile",
+    "mp_%25x9": "profile",
+    "st_%x9": "settings",
+    "st_%25x9": "settings"
+  };
+  return legacyCodes[code] || (Object.entries(dashboardCodes).find(([, value]) => value === code)?.[0] as DashboardPage | undefined) || null;
 }
 
 const latency = [
@@ -280,7 +286,7 @@ export function DashboardShell() {
 
           <div className="p-4 sm:p-6">
             {activePage === "overview" && <OverviewPage />}
-            {activePage === "profile" && <ProfilePage onEditRoute={() => navigateDashboard("profile", "ed_%25pf_cb")} />}
+            {activePage === "profile" && <ProfilePage onEditRoute={() => navigateDashboard("profile", "edit-profile")} />}
             {activePage === "conversations" && <StaticPage kind="conversations" />}
             {activePage === "inference" && <StaticPage kind="inference" />}
             {activePage === "providers" && <StaticPage kind="providers" />}
