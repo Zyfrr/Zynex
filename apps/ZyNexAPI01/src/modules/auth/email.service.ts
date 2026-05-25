@@ -19,7 +19,7 @@ export class EmailService {
     });
 
     await transporter.sendMail({
-      from: `"ZyNex Support" <${env.ZYNEX_SUPPORT_EMAIL}>`,
+      from: `"ZyNex Support" <${env.SPACESHIP_SMTP_USER}>`,
       to,
       subject: "Your ZyNex verification code",
       text: `Your ZyNex verification code is ${code}. This code expires soon.`,

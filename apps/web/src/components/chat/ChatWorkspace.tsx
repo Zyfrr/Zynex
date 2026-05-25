@@ -29,6 +29,16 @@ export function ChatWorkspace() {
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
   const activeUser = user ?? session?.user ?? null;
 
+  function openAuth(nextMode: "login" | "signup") {
+    setAuthMode(nextMode);
+    window.history.pushState(null, "", nextMode === "login" ? "/Login" : "/Register");
+  }
+
+  function closeAuth() {
+    setAuthMode(null);
+    window.history.pushState(null, "", "/");
+  }
+
   return (
     <main className="min-h-screen bg-[#F7F8FB] text-[#111827]">
       <div className="flex h-screen overflow-hidden">
@@ -45,7 +55,7 @@ export function ChatWorkspace() {
           setActiveMenu={setActiveMenu}
           user={activeUser}
           authenticated={Boolean(activeUser)}
-          onLoginClick={() => setAuthMode("login")}
+          onLoginClick={() => openAuth("login")}
         />
         <ChatMain
           temporaryChat={temporaryChat}
@@ -58,8 +68,8 @@ export function ChatWorkspace() {
           setPrompt={setPrompt}
           user={activeUser}
           authenticated={Boolean(activeUser)}
-          onLoginClick={() => setAuthMode("login")}
-          onSignupClick={() => setAuthMode("signup")}
+          onLoginClick={() => openAuth("login")}
+          onSignupClick={() => openAuth("signup")}
         />
       </div>
       {authMode && (
@@ -68,7 +78,7 @@ export function ChatWorkspace() {
             <button
               type="button"
               aria-label="Close auth modal"
-              onClick={() => setAuthMode(null)}
+              onClick={closeAuth}
               className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-[#E8EEF7] text-[#4C596C] hover:text-[#4F46E5]"
             >
               <X size={18} />
@@ -78,7 +88,7 @@ export function ChatWorkspace() {
               compact
               onAuthenticated={(nextUser) => {
                 setUser(nextUser);
-                setAuthMode(null);
+                closeAuth();
               }}
             />
           </div>

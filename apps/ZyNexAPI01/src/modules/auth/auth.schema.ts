@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const registerSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().optional(),
+  phoneCountryCode: z.string().regex(/^\+\d{1,4}$/).optional(),
+  phoneNumber: z.string().regex(/^\d{6,14}$/).optional(),
+  signupVerificationToken: z.string().min(16).optional(),
   firstName: z.string().min(2),
   lastName: z.string().min(1),
   dateOfBirth: z.string().optional(),
@@ -21,12 +24,14 @@ export const emailStartSchema = z.object({
 
 export const emailVerifySchema = z.object({
   email: z.string().email(),
-  code: z.string().regex(/^\d{4,8}$/)
+  code: z.string().regex(/^\d{4,8}$/),
+  purpose: z.enum(["LOGIN", "SIGNUP"]).default("LOGIN")
 });
 
 export const phoneStartSchema = z.object({
   countryCode: z.string().regex(/^\+\d{1,4}$/).default("+91"),
-  phoneNumber: z.string().regex(/^\d{6,14}$/)
+  phoneNumber: z.string().regex(/^\d{6,14}$/),
+  purpose: z.enum(["LOGIN", "SIGNUP"]).default("LOGIN")
 });
 
 export const phoneVerifySchema = phoneStartSchema.extend({

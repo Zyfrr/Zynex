@@ -16,10 +16,17 @@ import {
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
-import { zynexApi } from "@/lib/api";
+import { ZyNexApiError, zynexApi } from "@/lib/api";
 
 type AuthMode = "login" | "signup";
 type AuthStep = "start" | "code" | "password" | "profile" | "phone";
+type ToastState = { type: "success" | "error"; code: string; message: string } | null;
+type VerifiedSignup = {
+  signupVerificationToken?: string;
+  email?: string;
+  phoneCountryCode?: string;
+  phoneNumber?: string;
+};
 
 export function AuthFlow({
   mode,
@@ -35,6 +42,9 @@ export function AuthFlow({
   const [countryCode, setCountryCode] = useState("+91");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<ToastState>(null);
+  const [shakeHint, setShakeHint] = useState(false);
+  const [verifiedSignup, setVerifiedSignup] = useState<VerifiedSignup>({});
 
   const isSignup = mode === "signup";
 
@@ -45,9 +55,11 @@ export function AuthFlow({
         method: "POST",
         body: JSON.stringify({ email, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
+      setToast({ type: "success", code: "OTP001", message: "Verification code sent." });
       setStep(nextStep);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to start email verification");
+      showError(err, setToast);
+      pulseHint(setShakeHint);
     }
   }
 
@@ -87,6 +99,7 @@ export function AuthFlow({
 
           <div className={compact ? "p-1" : "p-6 sm:p-10"}>
             <div className="mx-auto max-w-md">
+              <ToastMessage toast={toast} onClose={() => setToast(null)} />
               {step !== "start" && (
                 <button
                   type="button"
@@ -106,6 +119,7 @@ export function AuthFlow({
                   onEmailContinue={() => isSignup ? startEmailCode("code") : setStep("password")}
                   onCodeContinue={() => startEmailCode("code")}
                   onPhoneContinue={() => setStep("phone")}
+                  shakeHint={shakeHint}
                 />
               )}
               {step === "code" && (
@@ -113,26 +127,43 @@ export function AuthFlow({
                   email={email}
                   isSignup={isSignup}
                   onContinue={async (code) => {
-                    const session = await zynexApi<{ user: { id: string; email?: string | null } }>("/api/v1/auth/ZyNexAPI01AuthEmailVerify", {
+                    const session = await zynexApi<{
+                      user?: { id: string; email?: string | null };
+                      signupVerificationToken?: string;
+                      verifiedEmail?: string;
+                    }>("/api/v1/auth/ZyNexAPI01AuthEmailVerify", {
                       method: "POST",
-                      body: JSON.stringify({ email, code })
+                      body: JSON.stringify({ email, code, purpose: isSignup ? "SIGNUP" : "LOGIN" })
                     });
-                    if (isSignup) setStep("profile");
-                    else onAuthenticated?.(session.user);
+                    if (isSignup) {
+                      setVerifiedSignup({ signupVerificationToken: session.signupVerificationToken, email: session.verifiedEmail || email });
+                      setToast({ type: "success", code: "AUTH_EMAIL_VERIFIED", message: "Email verified. Complete your profile." });
+                      setStep("profile");
+                    } else if (session.user) {
+                      setToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
+                      onAuthenticated?.(session.user);
+                    }
                   }}
+                  onToast={setToast}
                 />
               )}
-              {step === "password" && <PasswordStep email={email} setEmail={setEmail} onAuthenticated={onAuthenticated} />}
+              {step === "password" && <PasswordStep email={email} setEmail={setEmail} onAuthenticated={onAuthenticated} onToast={setToast} />}
               {step === "phone" && (
                 <PhoneStep
+                  isSignup={isSignup}
                   countryCode={countryCode}
                   setCountryCode={setCountryCode}
                   phoneNumber={phoneNumber}
                   setPhoneNumber={setPhoneNumber}
                   onAuthenticated={onAuthenticated}
+                  onVerifiedSignup={(nextVerified) => {
+                    setVerifiedSignup(nextVerified);
+                    setStep("profile");
+                  }}
+                  onToast={setToast}
                 />
               )}
-              {step === "profile" && <SignupProfileStep email={email} onAuthenticated={onAuthenticated} />}
+              {step === "profile" && <SignupProfileStep verifiedSignup={verifiedSignup.email ? verifiedSignup : { ...verifiedSignup, email }} onAuthenticated={onAuthenticated} onToast={setToast} />}
               {error && <p className="mt-4 rounded-xl bg-red-50 p-3 font-body text-sm font-semibold text-red-600">{error}</p>}
             </div>
           </div>
@@ -148,7 +179,8 @@ function StartStep({
   setEmail,
   onEmailContinue,
   onCodeContinue,
-  onPhoneContinue
+  onPhoneContinue,
+  shakeHint
 }: {
   isSignup: boolean;
   email: string;
@@ -156,6 +188,7 @@ function StartStep({
   onEmailContinue: () => void;
   onCodeContinue: () => void;
   onPhoneContinue: () => void;
+  shakeHint: boolean;
 }) {
   return (
     <>
@@ -211,6 +244,10 @@ function StartStep({
       </div>
 
       <AuthLegal isSignup={isSignup} />
+      <p className={`mt-4 text-center font-body text-sm font-semibold text-[#5D6A7C] ${shakeHint ? "animate-[ZyNexShake_420ms_ease-in-out]" : ""}`}>
+        {isSignup ? "Already have an account?" : "New to ZyNex?"}{" "}
+        <span className="text-[#4F46E5]">{isSignup ? "Please login." : "Create your account."}</span>
+      </p>
     </>
   );
 }
@@ -231,7 +268,7 @@ function AuthProviderButton({ label, icon, onClick }: { label: string; icon: Rea
   );
 }
 
-function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: boolean; onContinue: (code: string) => Promise<void> }) {
+function CodeStep({ email, isSignup, onContinue, onToast }: { email: string; isSignup: boolean; onContinue: (code: string) => Promise<void>; onToast: (toast: ToastState) => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   return (
@@ -252,6 +289,7 @@ function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: bo
           setError("");
           await onContinue(code);
         } catch (err) {
+          showError(err, onToast);
           setError(err instanceof Error ? err.message : "Verification failed");
         }
       }}>
@@ -269,10 +307,12 @@ function PasswordStep({
   email,
   setEmail,
   onAuthenticated
+  , onToast
 }: {
   email: string;
   setEmail: (value: string) => void;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
+  onToast: (toast: ToastState) => void;
 }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -283,8 +323,10 @@ function PasswordStep({
         method: "POST",
         body: JSON.stringify({ email, password })
       });
+      onToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
       onAuthenticated?.(session.user);
     } catch (err) {
+      showError(err, onToast);
       setError(err instanceof Error ? err.message : "Login failed");
     }
   }
@@ -329,17 +371,23 @@ function PasswordStep({
 }
 
 function PhoneStep({
+  isSignup,
   countryCode,
   setCountryCode,
   phoneNumber,
   setPhoneNumber,
-  onAuthenticated
+  onAuthenticated,
+  onVerifiedSignup,
+  onToast
 }: {
+  isSignup: boolean;
   countryCode: string;
   setCountryCode: (value: string) => void;
   phoneNumber: string;
   setPhoneNumber: (value: string) => void;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
+  onVerifiedSignup: (verified: VerifiedSignup) => void;
+  onToast: (toast: ToastState) => void;
 }) {
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
@@ -349,22 +397,39 @@ function PhoneStep({
       setError("");
       await zynexApi("/api/v1/auth/ZyNexAPI01AuthPhoneStart", {
         method: "POST",
-        body: JSON.stringify({ countryCode, phoneNumber })
+        body: JSON.stringify({ countryCode, phoneNumber, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
+      onToast({ type: "success", code: "OTP001", message: "Verification code sent." });
       setCodeSent(true);
     } catch (err) {
+      showError(err, onToast);
       setError(err instanceof Error ? err.message : "Unable to send OTP");
     }
   }
   async function verify() {
     try {
       setError("");
-      const session = await zynexApi<{ user: { id: string; email?: string | null } }>("/api/v1/auth/ZyNexAPI01AuthPhoneVerify", {
+      const session = await zynexApi<{
+        user?: { id: string; email?: string | null };
+        signupVerificationToken?: string;
+        verifiedPhone?: { countryCode: string; phoneNumber: string };
+      }>("/api/v1/auth/ZyNexAPI01AuthPhoneVerify", {
         method: "POST",
-        body: JSON.stringify({ countryCode, phoneNumber, code })
+        body: JSON.stringify({ countryCode, phoneNumber, code, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
-      onAuthenticated?.(session.user);
+      if (isSignup) {
+        onToast({ type: "success", code: "AUTH_PHONE_VERIFIED", message: "Phone verified. Complete your profile." });
+        onVerifiedSignup({
+          signupVerificationToken: session.signupVerificationToken,
+          phoneCountryCode: session.verifiedPhone?.countryCode || countryCode,
+          phoneNumber: session.verifiedPhone?.phoneNumber || phoneNumber
+        });
+      } else if (session.user) {
+        onToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
+        onAuthenticated?.(session.user);
+      }
     } catch (err) {
+      showError(err, onToast);
       setError(err instanceof Error ? err.message : "Phone verification failed");
     }
   }
@@ -422,12 +487,15 @@ function PhoneStep({
 }
 
 function SignupProfileStep({
-  email,
-  onAuthenticated
+  verifiedSignup,
+  onAuthenticated,
+  onToast
 }: {
-  email: string;
+  verifiedSignup: VerifiedSignup;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
+  onToast: (toast: ToastState) => void;
 }) {
+  const [email, setEmail] = useState(verifiedSignup.email || "");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -439,10 +507,22 @@ function SignupProfileStep({
       setError("");
       const session = await zynexApi<{ user: { id: string; email?: string | null } }>("/api/v1/auth/ZyNexAPI01AuthRegisterManual", {
         method: "POST",
-        body: JSON.stringify({ email, firstName, lastName, dateOfBirth, password, termsAccepted })
+        body: JSON.stringify({
+          email,
+          phoneCountryCode: verifiedSignup.phoneCountryCode,
+          phoneNumber: verifiedSignup.phoneNumber,
+          signupVerificationToken: verifiedSignup.signupVerificationToken,
+          firstName,
+          lastName,
+          dateOfBirth,
+          password,
+          termsAccepted
+        })
       });
+      onToast({ type: "success", code: "AUTH_ACCOUNT_CREATED", message: "Account created successfully." });
       onAuthenticated?.(session.user);
     } catch (err) {
+      showError(err, onToast);
       setError(err instanceof Error ? err.message : "Registration failed");
     }
   }
@@ -452,9 +532,14 @@ function SignupProfileStep({
       <p className="font-body text-sm font-bold uppercase text-[#4F46E5]">Complete profile</p>
       <h2 className="mt-3 font-display text-[48px] font-semibold leading-none">Secure your account</h2>
       <p className="mt-4 font-body text-sm leading-6 text-[#5D6A7C]">
-        Verified email: <strong>{email || "your email"}</strong>
+        {verifiedSignup.phoneNumber ? "Verified phone:" : "Verified email:"}{" "}
+        <strong>{verifiedSignup.phoneNumber ? `${verifiedSignup.phoneCountryCode}${verifiedSignup.phoneNumber}` : email || "your email"}</strong>
       </p>
       <div className="mt-8 grid gap-4">
+        {verifiedSignup.phoneNumber && (
+          <IconInput icon={<Phone size={18} />} label="Verified phone" value={`${verifiedSignup.phoneCountryCode}${verifiedSignup.phoneNumber}`} onChange={() => {}} disabled />
+        )}
+        <IconInput icon={<Mail size={18} />} label="Email address" value={email} onChange={setEmail} disabled={Boolean(verifiedSignup.email)} />
         <IconInput icon={<UserRound size={18} />} label="First name" value={firstName} onChange={setFirstName} />
         <IconInput icon={<UserRound size={18} />} label="Last name" value={lastName} onChange={setLastName} />
         <IconInput icon={<Calendar size={18} />} label="Date of birth" type="date" value={dateOfBirth} onChange={setDateOfBirth} />
@@ -491,12 +576,14 @@ function IconInput({
   type = "text",
   value,
   onChange
+  , disabled = false
 }: {
   icon: React.ReactNode;
   label: string;
   type?: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label>
@@ -507,11 +594,43 @@ function IconInput({
           type={type}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-full min-w-0 flex-1 bg-transparent font-body text-sm outline-none"
+          disabled={disabled}
+          className="h-full min-w-0 flex-1 bg-transparent font-body text-sm outline-none disabled:text-[#8A94A6]"
         />
       </div>
     </label>
   );
+}
+
+function ToastMessage({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
+  if (!toast) return null;
+
+  const isError = toast.type === "error";
+  return (
+    <div className={`mb-4 rounded-2xl border p-3 ${isError ? "border-red-100 bg-red-50" : "border-emerald-100 bg-emerald-50"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={`font-body text-xs font-bold uppercase ${isError ? "text-red-600" : "text-emerald-600"}`}>{toast.code}</p>
+          <p className="mt-1 font-body text-sm font-semibold text-[#253248]">{toast.message}</p>
+        </div>
+        <button type="button" onClick={onClose} className="font-body text-xs font-bold text-[#6B7280]">Close</button>
+      </div>
+    </div>
+  );
+}
+
+function showError(error: unknown, setToast: (toast: ToastState) => void) {
+  if (error instanceof ZyNexApiError) {
+    setToast({ type: "error", code: error.code, message: error.message });
+    return;
+  }
+
+  setToast({ type: "error", code: "SYS001", message: error instanceof Error ? error.message : "Unexpected ZyNex error" });
+}
+
+function pulseHint(setShakeHint: (value: boolean) => void) {
+  setShakeHint(true);
+  window.setTimeout(() => setShakeHint(false), 450);
 }
 
 function AuthLegal({ isSignup }: { isSignup: boolean }) {

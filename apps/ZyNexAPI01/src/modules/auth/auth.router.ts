@@ -60,14 +60,13 @@ authRouter.post(
   "/ZyNexAPI01AuthEmailVerify",
   asyncHandler(async (req, res) => {
     const body = emailVerifySchema.parse(req.body);
-    const session = await authService.verifyEmailCode(body.email, body.code, res);
+    const session = await authService.verifyEmailCode(body.email, body.code, body.purpose, res);
     res.json({
       success: true,
       data: {
         verified: true,
         identifier: body.email,
-        user: { id: session.userId, email: session.email },
-        accessToken: session.accessToken
+        ...session
       }
     });
   })
@@ -77,7 +76,7 @@ authRouter.post(
   "/ZyNexAPI01AuthPhoneStart",
   asyncHandler(async (req, res) => {
     const body = phoneStartSchema.parse(req.body);
-    const result = await authService.startPhoneCode(body.countryCode, body.phoneNumber);
+    const result = await authService.startPhoneCode(body.countryCode, body.phoneNumber, body.purpose);
     res.status(202).json({
       success: true,
       data: { ...result, provider: "TWILIO" }
@@ -89,14 +88,13 @@ authRouter.post(
   "/ZyNexAPI01AuthPhoneVerify",
   asyncHandler(async (req, res) => {
     const body = phoneVerifySchema.parse(req.body);
-    const session = await authService.verifyPhoneCode(body.countryCode, body.phoneNumber, body.code, res);
+    const session = await authService.verifyPhoneCode(body.countryCode, body.phoneNumber, body.code, body.purpose, res);
     res.json({
       success: true,
       data: {
         verified: true,
         identifier: `${body.countryCode}${body.phoneNumber}`,
-        user: { id: session.userId, email: session.email },
-        accessToken: session.accessToken
+        ...session
       }
     });
   })
