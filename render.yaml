@@ -20,9 +20,9 @@ services:
       - key: ZYNEX_COOKIE_DOMAIN
         sync: false
       - key: SPACESHIP_SMTP_HOST
-        sync: false
+        value: mail.spacemail.com
       - key: SPACESHIP_SMTP_PORT
-        value: 587
+        value: 465
       - key: SPACESHIP_SMTP_USER
         value: support@zyfrr.com
       - key: SPACESHIP_SMTP_PASS

@@ -15,12 +15,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ZyNexApiError, zynexApi } from "@/lib/api";
 
 type AuthMode = "login" | "signup";
 type AuthStep = "start" | "code" | "password" | "profile" | "phone";
-type ToastState = { type: "success" | "error"; code: string; message: string } | null;
+type ToastState = { type: "success" | "error"; code: string; message: string };
 type VerifiedSignup = {
   signupVerificationToken?: string;
   email?: string;
@@ -42,7 +43,6 @@ export function AuthFlow({
   const [countryCode, setCountryCode] = useState("+91");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
-  const [toast, setToast] = useState<ToastState>(null);
   const [shakeHint, setShakeHint] = useState(false);
   const [verifiedSignup, setVerifiedSignup] = useState<VerifiedSignup>({});
 
@@ -55,10 +55,10 @@ export function AuthFlow({
         method: "POST",
         body: JSON.stringify({ email, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
-      setToast({ type: "success", code: "OTP001", message: "Verification code sent." });
+      notify({ type: "success", code: "OTP001", message: "Verification code sent." });
       setStep(nextStep);
     } catch (err) {
-      showError(err, setToast);
+      showError(err);
       pulseHint(setShakeHint);
     }
   }
@@ -99,7 +99,6 @@ export function AuthFlow({
 
           <div className={compact ? "p-1" : "p-6 sm:p-10"}>
             <div className="mx-auto max-w-md">
-              <ToastMessage toast={toast} onClose={() => setToast(null)} />
               {step !== "start" && (
                 <button
                   type="button"
@@ -137,17 +136,16 @@ export function AuthFlow({
                     });
                     if (isSignup) {
                       setVerifiedSignup({ signupVerificationToken: session.signupVerificationToken, email: session.verifiedEmail || email });
-                      setToast({ type: "success", code: "AUTH_EMAIL_VERIFIED", message: "Email verified. Complete your profile." });
+                      notify({ type: "success", code: "AUTH_EMAIL_VERIFIED", message: "Email verified. Complete your profile." });
                       setStep("profile");
                     } else if (session.user) {
-                      setToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
+                      notify({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
                       onAuthenticated?.(session.user);
                     }
                   }}
-                  onToast={setToast}
                 />
               )}
-              {step === "password" && <PasswordStep email={email} setEmail={setEmail} onAuthenticated={onAuthenticated} onToast={setToast} />}
+              {step === "password" && <PasswordStep email={email} setEmail={setEmail} onAuthenticated={onAuthenticated} />}
               {step === "phone" && (
                 <PhoneStep
                   isSignup={isSignup}
@@ -160,10 +158,9 @@ export function AuthFlow({
                     setVerifiedSignup(nextVerified);
                     setStep("profile");
                   }}
-                  onToast={setToast}
                 />
               )}
-              {step === "profile" && <SignupProfileStep verifiedSignup={verifiedSignup.email ? verifiedSignup : { ...verifiedSignup, email }} onAuthenticated={onAuthenticated} onToast={setToast} />}
+              {step === "profile" && <SignupProfileStep verifiedSignup={verifiedSignup.email ? verifiedSignup : { ...verifiedSignup, email }} onAuthenticated={onAuthenticated} />}
               {error && <p className="mt-4 rounded-xl bg-red-50 p-3 font-body text-sm font-semibold text-red-600">{error}</p>}
             </div>
           </div>
@@ -268,7 +265,7 @@ function AuthProviderButton({ label, icon, onClick }: { label: string; icon: Rea
   );
 }
 
-function CodeStep({ email, isSignup, onContinue, onToast }: { email: string; isSignup: boolean; onContinue: (code: string) => Promise<void>; onToast: (toast: ToastState) => void }) {
+function CodeStep({ email, isSignup, onContinue }: { email: string; isSignup: boolean; onContinue: (code: string) => Promise<void> }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   return (
@@ -289,7 +286,7 @@ function CodeStep({ email, isSignup, onContinue, onToast }: { email: string; isS
           setError("");
           await onContinue(code);
         } catch (err) {
-          showError(err, onToast);
+          showError(err);
           setError(err instanceof Error ? err.message : "Verification failed");
         }
       }}>
@@ -307,12 +304,10 @@ function PasswordStep({
   email,
   setEmail,
   onAuthenticated
-  , onToast
 }: {
   email: string;
   setEmail: (value: string) => void;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
-  onToast: (toast: ToastState) => void;
 }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -323,10 +318,10 @@ function PasswordStep({
         method: "POST",
         body: JSON.stringify({ email, password })
       });
-      onToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
+      notify({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
       onAuthenticated?.(session.user);
     } catch (err) {
-      showError(err, onToast);
+      showError(err);
       setError(err instanceof Error ? err.message : "Login failed");
     }
   }
@@ -377,8 +372,7 @@ function PhoneStep({
   phoneNumber,
   setPhoneNumber,
   onAuthenticated,
-  onVerifiedSignup,
-  onToast
+  onVerifiedSignup
 }: {
   isSignup: boolean;
   countryCode: string;
@@ -387,7 +381,6 @@ function PhoneStep({
   setPhoneNumber: (value: string) => void;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
   onVerifiedSignup: (verified: VerifiedSignup) => void;
-  onToast: (toast: ToastState) => void;
 }) {
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
@@ -399,10 +392,10 @@ function PhoneStep({
         method: "POST",
         body: JSON.stringify({ countryCode, phoneNumber, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
-      onToast({ type: "success", code: "OTP001", message: "Verification code sent." });
+      notify({ type: "success", code: "OTP001", message: "Verification code sent." });
       setCodeSent(true);
     } catch (err) {
-      showError(err, onToast);
+      showError(err);
       setError(err instanceof Error ? err.message : "Unable to send OTP");
     }
   }
@@ -418,18 +411,18 @@ function PhoneStep({
         body: JSON.stringify({ countryCode, phoneNumber, code, purpose: isSignup ? "SIGNUP" : "LOGIN" })
       });
       if (isSignup) {
-        onToast({ type: "success", code: "AUTH_PHONE_VERIFIED", message: "Phone verified. Complete your profile." });
+        notify({ type: "success", code: "AUTH_PHONE_VERIFIED", message: "Phone verified. Complete your profile." });
         onVerifiedSignup({
           signupVerificationToken: session.signupVerificationToken,
           phoneCountryCode: session.verifiedPhone?.countryCode || countryCode,
           phoneNumber: session.verifiedPhone?.phoneNumber || phoneNumber
         });
       } else if (session.user) {
-        onToast({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
+        notify({ type: "success", code: "AUTH_LOGIN_SUCCESS", message: "Login successful." });
         onAuthenticated?.(session.user);
       }
     } catch (err) {
-      showError(err, onToast);
+      showError(err);
       setError(err instanceof Error ? err.message : "Phone verification failed");
     }
   }
@@ -488,12 +481,10 @@ function PhoneStep({
 
 function SignupProfileStep({
   verifiedSignup,
-  onAuthenticated,
-  onToast
+  onAuthenticated
 }: {
   verifiedSignup: VerifiedSignup;
   onAuthenticated?: (user: { id: string; email?: string | null }) => void;
-  onToast: (toast: ToastState) => void;
 }) {
   const [email, setEmail] = useState(verifiedSignup.email || "");
   const [firstName, setFirstName] = useState("");
@@ -519,10 +510,10 @@ function SignupProfileStep({
           termsAccepted
         })
       });
-      onToast({ type: "success", code: "AUTH_ACCOUNT_CREATED", message: "Account created successfully." });
+      notify({ type: "success", code: "AUTH_ACCOUNT_CREATED", message: "Account created successfully." });
       onAuthenticated?.(session.user);
     } catch (err) {
-      showError(err, onToast);
+      showError(err);
       setError(err instanceof Error ? err.message : "Registration failed");
     }
   }
@@ -602,30 +593,25 @@ function IconInput({
   );
 }
 
-function ToastMessage({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
-  if (!toast) return null;
+function notify(nextToast: ToastState) {
+  const title = `Code: ${nextToast.code}`;
+  const description = `Message: ${nextToast.message}`;
 
-  const isError = toast.type === "error";
-  return (
-    <div className={`mb-4 rounded-2xl border p-3 ${isError ? "border-red-100 bg-red-50" : "border-emerald-100 bg-emerald-50"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className={`font-body text-xs font-bold uppercase ${isError ? "text-red-600" : "text-emerald-600"}`}>{toast.code}</p>
-          <p className="mt-1 font-body text-sm font-semibold text-[#253248]">{toast.message}</p>
-        </div>
-        <button type="button" onClick={onClose} className="font-body text-xs font-bold text-[#6B7280]">Close</button>
-      </div>
-    </div>
-  );
-}
-
-function showError(error: unknown, setToast: (toast: ToastState) => void) {
-  if (error instanceof ZyNexApiError) {
-    setToast({ type: "error", code: error.code, message: error.message });
+  if (nextToast.type === "error") {
+    toast.error(title, { description });
     return;
   }
 
-  setToast({ type: "error", code: "SYS001", message: error instanceof Error ? error.message : "Unexpected ZyNex error" });
+  toast.success(title, { description });
+}
+
+function showError(error: unknown) {
+  if (error instanceof ZyNexApiError) {
+    notify({ type: "error", code: error.code, message: error.message });
+    return;
+  }
+
+  notify({ type: "error", code: "SYS001", message: error instanceof Error ? error.message : "Unexpected ZyNex error" });
 }
 
 function pulseHint(setShakeHint: (value: boolean) => void) {
