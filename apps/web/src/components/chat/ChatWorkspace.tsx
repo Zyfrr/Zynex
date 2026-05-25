@@ -42,6 +42,8 @@ export function ChatWorkspace() {
           name: profileName || apiUser.name || apiUser.email,
           image: apiUser.profile?.avatarUrl || apiUser.image
         });
+      } else {
+        setUser(null);
       }
     } catch {
       if (!session?.user) setUser(null);
@@ -49,7 +51,7 @@ export function ChatWorkspace() {
   }
 
   useEffect(() => {
-    if (session?.user || user) void refreshProfile();
+    void refreshProfile();
   }, [session?.user?.email]);
 
   function openAuth(nextMode: "login" | "signup") {

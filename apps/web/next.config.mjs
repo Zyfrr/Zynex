@@ -1,15 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@zynex/shared"],
-  async redirects() {
-    return [
-      {
-        source: "/Dashboard",
-        destination: "/dashboard",
-        permanent: true
-      }
-    ];
-  }
+  transpilePackages: ["@zynex/shared"]
 };
 
 export default nextConfig;
