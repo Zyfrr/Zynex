@@ -10,6 +10,8 @@ export function errorHandlerMiddleware(
 ) {
   const requestId = req.header("x-request-id") || "ZyNexReqUnknown";
 
+  req.log?.error({ err: error, requestId }, "ZyNex API request failed");
+
   if (error instanceof AppError) {
     return res.status(error.statusCode).json({
       success: false,

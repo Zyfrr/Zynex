@@ -1,12 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { X } from "lucide-react";
 import { AuthFlow } from "@/components/auth/AuthFlow";
 import { ChatMain } from "@/components/chat/ChatMain";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 
+type WorkspaceUser = {
+  id?: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
 export function ChatWorkspace() {
+  const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [temporaryChat, setTemporaryChat] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -16,8 +25,9 @@ export function ChatWorkspace() {
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [user, setUser] = useState<{ id: string; email?: string | null } | null>(null);
+  const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
+  const activeUser = user ?? session?.user ?? null;
 
   return (
     <main className="min-h-screen bg-[#F7F8FB] text-[#111827]">
@@ -33,7 +43,8 @@ export function ChatWorkspace() {
           setRecentOpen={setRecentOpen}
           activeMenu={activeMenu}
           setActiveMenu={setActiveMenu}
-          authenticated={Boolean(user)}
+          user={activeUser}
+          authenticated={Boolean(activeUser)}
           onLoginClick={() => setAuthMode("login")}
         />
         <ChatMain
@@ -45,7 +56,8 @@ export function ChatWorkspace() {
           setRecording={setRecording}
           prompt={prompt}
           setPrompt={setPrompt}
-          authenticated={Boolean(user)}
+          user={activeUser}
+          authenticated={Boolean(activeUser)}
           onLoginClick={() => setAuthMode("login")}
           onSignupClick={() => setAuthMode("signup")}
         />

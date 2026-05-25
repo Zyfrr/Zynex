@@ -7,6 +7,8 @@ import { generateNumericCode, hashOtp, verifyOtp } from "./auth.otp";
 import { hashSecret, verifySecret } from "./auth.password";
 import { signAccessToken, signRefreshToken } from "./auth.tokens";
 import { smsService } from "./sms.service";
+import { AppError } from "../../errors/AppError";
+import { ErrorCode } from "../../errors/ErrorCodes";
 
 const ACCESS_COOKIE = "ZyNexAccessToken";
 const REFRESH_COOKIE = "ZyNexRefreshToken";
@@ -36,23 +38,19 @@ export class AuthService {
     const cooldownSeconds = await configService.getNumber("AuthOtpResendCooldownSeconds");
     const code = generateNumericCode(digits);
 
-    try {
-      await prisma.verificationCode.updateMany({
-        where: { identifier: email, purpose, status: "PENDING" },
-        data: { status: "EXPIRED" }
-      });
-      await prisma.verificationCode.create({
-        data: {
-          identifier: email,
-          codeHash: await hashOtp(code),
-          purpose,
-          maxAttempts,
-          expiresAt: addMinutes(new Date(), expiresMinutes)
-        }
-      });
-    } catch {
-      // Keep dev flow usable before migrations are applied.
-    }
+    await prisma.verificationCode.updateMany({
+      where: { identifier: email, purpose, status: "PENDING" },
+      data: { status: "EXPIRED" }
+    });
+    await prisma.verificationCode.create({
+      data: {
+        identifier: email,
+        codeHash: await hashOtp(code),
+        purpose,
+        maxAttempts,
+        expiresAt: addMinutes(new Date(), expiresMinutes)
+      }
+    });
 
     const delivery = await emailService.sendVerificationCode(email, code);
     return { identifier: email, purpose, digits, expiresInMinutes: expiresMinutes, resendCooldownSeconds: cooldownSeconds, delivery };
@@ -65,18 +63,18 @@ export class AuthService {
     });
 
     if (!verification || verification.expiresAt < new Date()) {
-      throw new Error("Invalid or expired verification code");
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid or expired verification code", 401);
     }
 
     if (verification.attempts >= verification.maxAttempts) {
       await prisma.verificationCode.update({ where: { id: verification.id }, data: { status: "BLOCKED" } });
-      throw new Error("Verification attempt limit exceeded");
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Verification attempt limit exceeded", 429);
     }
 
     const valid = await verifyOtp(verification.codeHash, code);
     if (!valid) {
       await prisma.verificationCode.update({ where: { id: verification.id }, data: { attempts: { increment: 1 } } });
-      throw new Error("Invalid verification code");
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid verification code", 401);
     }
 
     await prisma.verificationCode.update({
@@ -100,17 +98,19 @@ export class AuthService {
     const code = generateNumericCode(digits);
     const identifier = `${countryCode}${phoneNumber}`;
 
-    try {
-      await prisma.verificationCode.create({
-        data: {
-          identifier,
-          codeHash: await hashOtp(code),
-          purpose: "PHONE_LOGIN",
-          maxAttempts,
-          expiresAt: addMinutes(new Date(), expiresMinutes)
-        }
-      });
-    } catch {}
+    await prisma.verificationCode.updateMany({
+      where: { identifier, purpose: "PHONE_LOGIN", status: "PENDING" },
+      data: { status: "EXPIRED" }
+    });
+    await prisma.verificationCode.create({
+      data: {
+        identifier,
+        codeHash: await hashOtp(code),
+        purpose: "PHONE_LOGIN",
+        maxAttempts,
+        expiresAt: addMinutes(new Date(), expiresMinutes)
+      }
+    });
 
     const delivery = await smsService.sendVerificationCode(identifier, code);
     return { identifier, digits, expiresInMinutes: expiresMinutes, delivery };
@@ -124,13 +124,13 @@ export class AuthService {
     });
 
     if (!verification || verification.expiresAt < new Date()) {
-      throw new Error("Invalid or expired verification code");
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid or expired verification code", 401);
     }
 
     const valid = await verifyOtp(verification.codeHash, code);
     if (!valid) {
       await prisma.verificationCode.update({ where: { id: verification.id }, data: { attempts: { increment: 1 } } });
-      throw new Error("Invalid verification code");
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid verification code", 401);
     }
 
     await prisma.verificationCode.update({
@@ -192,9 +192,9 @@ export class AuthService {
 
   async loginPassword(email: string, password: string, res: Response) {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user?.passwordHash) throw new Error("Invalid credentials");
+    if (!user?.passwordHash) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid credentials", 401);
     const valid = await verifySecret(user.passwordHash, password);
-    if (!valid) throw new Error("Invalid credentials");
+    if (!valid) throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid credentials", 401);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), statusCode: "01" } });
     return this.createSession(user.id, email, res);
   }

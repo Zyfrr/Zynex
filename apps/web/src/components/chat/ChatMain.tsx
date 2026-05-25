@@ -11,6 +11,7 @@ type ChatMainProps = {
   setRecording: (value: boolean) => void;
   prompt: string;
   setPrompt: (value: string) => void;
+  user?: { name?: string | null; email?: string | null; image?: string | null } | null;
   authenticated: boolean;
   onLoginClick: () => void;
   onSignupClick: () => void;
@@ -25,10 +26,14 @@ export function ChatMain({
   setRecording,
   prompt,
   setPrompt,
+  user,
   authenticated,
   onLoginClick,
   onSignupClick
 }: ChatMainProps) {
+  const displayName = user?.name || user?.email || "ZyNex Operator";
+  const initials = getInitials(displayName);
+
   return (
     <section className="flex min-w-0 flex-1 flex-col">
       <header className="flex h-[58px] shrink-0 items-center justify-between border-b border-[#E8EEF7] bg-white/90 px-5 backdrop-blur-xl">
@@ -71,6 +76,16 @@ export function ChatMain({
                 Sign up for free
               </button>
             </>
+          )}
+          {authenticated && (
+            <div className="flex items-center gap-2 rounded-full border border-[#E8EEF7] bg-white py-1 pl-1 pr-3">
+              <span className="grid h-8 w-8 overflow-hidden rounded-full bg-[#111827] place-items-center font-body text-[11px] font-bold uppercase text-white">
+                {user?.image ? <img src={user.image} alt={displayName} className="h-full w-full object-cover" /> : initials}
+              </span>
+              <span className="max-w-[180px] truncate font-body text-sm font-semibold text-[#253248]">
+                {displayName}
+              </span>
+            </div>
           )}
         </div>
       </header>
@@ -170,6 +185,15 @@ export function ChatMain({
       </div>
     </section>
   );
+}
+
+function getInitials(value: string) {
+  const parts = value
+    .split(/[ @._-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return ((parts[0]?.[0] || "Z") + (parts[1]?.[0] || parts[0]?.[1] || "N")).toUpperCase();
 }
 
 function IconButton({

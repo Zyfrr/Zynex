@@ -1,4 +1,5 @@
 import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { groupedChats, projects } from "@/components/chat/chatData";
 import { ListRow, MenuAction, projectIcon, SidebarSection } from "@/components/chat/SidebarMenu";
 import { SidebarPanelIcon } from "@/components/chat/SidebarPanelIcon";
@@ -14,6 +15,7 @@ type ChatSidebarProps = {
   setRecentOpen: (value: boolean) => void;
   activeMenu: string | null;
   setActiveMenu: (value: string | null) => void;
+  user?: { name?: string | null; email?: string | null; image?: string | null } | null;
   authenticated: boolean;
   onLoginClick: () => void;
 };
@@ -29,10 +31,13 @@ export function ChatSidebar({
   setRecentOpen,
   activeMenu,
   setActiveMenu,
+  user,
   authenticated,
   onLoginClick
 }: ChatSidebarProps) {
   const activeChats = groupedChats.filter((group) => group.items.length > 0);
+  const displayName = user?.name || user?.email || "ZyNex Operator";
+  const initials = getInitials(displayName);
 
   return (
     <aside
@@ -184,7 +189,9 @@ export function ChatSidebar({
             <MenuAction icon={<User size={15} />} label="Profile" />
             <MenuAction icon={<Settings size={15} />} label="Settings" />
             <MenuAction icon={<Sparkles size={15} />} label="Dashboard" />
-            <MenuAction icon={<LogOut size={15} />} label="Logout" danger />
+            <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className="w-full">
+              <MenuAction icon={<LogOut size={15} />} label="Logout" danger />
+            </button>
           </div>
         )}
         <button
@@ -194,16 +201,22 @@ export function ChatSidebar({
             collapsed ? "justify-center" : "justify-start"
           }`}
         >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#111827] font-body text-xs font-bold text-white">
-            {authenticated ? "ZN" : <User size={17} />}
+          <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[#111827] font-body text-xs font-bold text-white">
+            {authenticated && user?.image ? (
+              <img src={user.image} alt={displayName} className="h-full w-full object-cover" />
+            ) : authenticated ? (
+              initials
+            ) : (
+              <User size={17} />
+            )}
           </span>
           {!collapsed && (
             <span className="min-w-0 text-left">
               <span className="block truncate font-body text-sm font-semibold text-[#111827]">
-                {authenticated ? "ZyNex Operator" : "Login"}
+                {authenticated ? displayName : "Login"}
               </span>
               <span className="block truncate font-body text-xs font-medium text-[#6B7280]">
-                {authenticated ? "Account and settings" : "Access your workspace"}
+                {authenticated ? user?.email || "Account and settings" : "Access your workspace"}
               </span>
             </span>
           )}
@@ -211,4 +224,13 @@ export function ChatSidebar({
       </div>
     </aside>
   );
+}
+
+function getInitials(value: string) {
+  const parts = value
+    .split(/[ @._-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return (parts[0]?.[0] || "Z") + (parts[1]?.[0] || parts[0]?.[1] || "N");
 }

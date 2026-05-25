@@ -21,4 +21,4 @@ ENV ZYNEX_API_PORT=4101
 
 EXPOSE 4101
 
-CMD ["node", "apps/ZyNexAPI01/dist/server.js"]
+CMD ["sh", "-c", "pnpm prisma migrate deploy && node apps/ZyNexAPI01/dist/server.js"]
