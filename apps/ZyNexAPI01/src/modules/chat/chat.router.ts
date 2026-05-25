@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { asyncHandler } from "@/utils/asyncHandler";
+import { asyncHandler } from "../../utils/asyncHandler";
 import { sendMessageSchema } from "./chat.schema";
 
 export const chatRouter = Router();

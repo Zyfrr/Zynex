@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authConfigDefaults } from "@/config/authConfig";
-import { asyncHandler } from "@/utils/asyncHandler";
+import { authConfigDefaults } from "../../config/authConfig";
+import { asyncHandler } from "../../utils/asyncHandler";
 import { authService } from "./auth.service";
 import {
   emailStartSchema,

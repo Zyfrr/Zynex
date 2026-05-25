@@ -3,9 +3,9 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import { errorHandlerMiddleware } from "@/middleware/errorHandler.middleware";
-import { requestIdMiddleware } from "@/middleware/requestId.middleware";
-import { routes } from "@/routes";
+import { errorHandlerMiddleware } from "./middleware/errorHandler.middleware";
+import { requestIdMiddleware } from "./middleware/requestId.middleware";
+import { routes } from "./routes";
 
 export function createApp() {
   const app = express();

@@ -1,5 +1,5 @@
-import { prisma } from "@/config/database";
-import { authConfigDefaults } from "@/config/authConfig";
+import { prisma } from "../../config/database";
+import { authConfigDefaults } from "../../config/authConfig";
 
 type ConfigPrimitive = string | number | boolean;
 

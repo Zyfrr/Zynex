@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { env } from "@/config/env";
+import { env } from "../../config/env";
 
 export class EmailService {
   async sendVerificationCode(to: string, code: string) {

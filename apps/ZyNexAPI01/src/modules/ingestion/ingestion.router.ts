@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { asyncHandler } from "@/utils/asyncHandler";
+import { asyncHandler } from "../../utils/asyncHandler";
 import { inferenceLogSchema } from "./ingestion.schema";
 
 export const ingestionRouter = Router();

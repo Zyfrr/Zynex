@@ -1,5 +1,5 @@
 import twilio from "twilio";
-import { env } from "@/config/env";
+import { env } from "../../config/env";
 
 export class SmsService {
   async sendVerificationCode(to: string, code: string) {

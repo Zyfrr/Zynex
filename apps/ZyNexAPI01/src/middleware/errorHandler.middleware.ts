@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { AppError } from "@/errors/AppError";
-import { ErrorCode } from "@/errors/ErrorCodes";
+import { AppError } from "../errors/AppError";
+import { ErrorCode } from "../errors/ErrorCodes";
 
 export function errorHandlerMiddleware(
   error: Error,

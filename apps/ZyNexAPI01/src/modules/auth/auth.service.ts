@@ -1,7 +1,7 @@
 import type { Response } from "express";
-import { prisma } from "@/config/database";
-import { env } from "@/config/env";
-import { configService } from "@/modules/config/config.service";
+import { prisma } from "../../config/database";
+import { env } from "../../config/env";
+import { configService } from "../config/config.service";
 import { emailService } from "./email.service";
 import { generateNumericCode, hashOtp, verifyOtp } from "./auth.otp";
 import { hashSecret, verifySecret } from "./auth.password";
