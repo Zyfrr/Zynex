@@ -1,6 +1,6 @@
-import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User, X } from "lucide-react";
+import { Clock3, Folder, FolderOpen, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User, X } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ListRow, MenuAction, SidebarSection } from "@/components/chat/SidebarMenu";
 import { SidebarPanelIcon } from "@/components/chat/SidebarPanelIcon";
@@ -28,16 +28,24 @@ type ChatSidebarProps = {
     status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
     provider: string;
     model: string;
+    pinned?: boolean;
+    projectId?: string | null;
     messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
   }>;
+  projects?: Array<{ id: string; name: string }>;
+  activeProjectId?: string | null;
   activeConversationId?: string | null;
   onNewChat?: () => void;
+  onCreateProject?: (name: string) => void;
+  onSelectProject?: (projectId: string | null) => void;
   onSelectConversation?: (conversation: {
     id: string;
     title?: string | null;
     status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
     provider: string;
     model: string;
+    pinned?: boolean;
+    projectId?: string | null;
     messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
   }) => void;
   onPinConversation?: (conversationId: string) => void;
@@ -62,8 +70,12 @@ export function ChatSidebar({
   authenticated,
   onLoginClick,
   conversations = [],
+  projects = [],
+  activeProjectId,
   activeConversationId,
   onNewChat,
+  onCreateProject,
+  onSelectProject,
   onSelectConversation,
   onPinConversation,
   onRenameConversation,
@@ -72,6 +84,11 @@ export function ChatSidebar({
   const displayName = user?.name || user?.email || "ZyNex Operator";
   const firstName = getFirstName(displayName);
   const initials = getInitials(displayName);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const visibleConversations = activeProjectId ? conversations.filter((conversation) => conversation.projectId === activeProjectId) : conversations;
 
   useEffect(() => {
     if (!activeMenu) return;
@@ -196,10 +213,38 @@ export function ChatSidebar({
           open={projectsOpen}
           onToggle={() => setProjectsOpen(!projectsOpen)}
           actionIcon={<Plus size={15} />}
+          onAction={() => setProjectModalOpen(true)}
         />
         {projectsOpen && authenticated && (
           <div className="mt-1 space-y-1">
-            {!collapsed && <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">No projects yet. Create a new project from the project action.</p>}
+            {!collapsed && projects.length === 0 && <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">No projects yet. Create a new project from the project action.</p>}
+            {projects.length > 0 && (
+              <ListRow
+                collapsed={collapsed}
+                title="All chats"
+                leadingIcon={<FolderOpen size={16} />}
+                activeMenu={activeMenu}
+                setActiveMenu={setActiveMenu}
+                active={!activeProjectId}
+                menuId="project-all"
+                showActions={false}
+                onClick={() => onSelectProject?.(null)}
+              />
+            )}
+            {projects.map((project) => (
+              <ListRow
+                key={project.id}
+                collapsed={collapsed}
+                title={project.name}
+                leadingIcon={activeProjectId === project.id ? <FolderOpen size={16} /> : <Folder size={16} />}
+                activeMenu={activeMenu}
+                setActiveMenu={setActiveMenu}
+                active={activeProjectId === project.id}
+                menuId={`project-${project.id}`}
+                showActions={false}
+                onClick={() => onSelectProject?.(project.id)}
+              />
+            ))}
           </div>
         )}
 
@@ -213,7 +258,7 @@ export function ChatSidebar({
           />
           {recentOpen && (
             <div className="mt-1 space-y-4">
-              {conversations.length > 0 && (
+              {visibleConversations.length > 0 && (
                 <div>
                   {!collapsed && (
                     <p className="px-3 pb-1 font-body text-[11px] font-semibold text-[#8A94A6]">
@@ -221,7 +266,7 @@ export function ChatSidebar({
                     </p>
                   )}
                   <div className="space-y-1">
-                    {conversations.map((conversation) => (
+                    {visibleConversations.map((conversation) => (
                       <ListRow
                         key={conversation.id}
                         collapsed={collapsed}
@@ -230,11 +275,14 @@ export function ChatSidebar({
                         activeMenu={activeMenu}
                         setActiveMenu={setActiveMenu}
                         active={conversation.id === activeConversationId}
+                        pinned={Boolean(conversation.pinned)}
+                        menuId={`conversation-${conversation.id}`}
                         onClick={() => onSelectConversation?.(conversation)}
                         onPin={() => onPinConversation?.(conversation.id)}
                         onRename={() => {
-                          const title = window.prompt("Rename conversation", conversation.title || "Untitled conversation");
-                          if (title) onRenameConversation?.(conversation.id, title);
+                          setRenameTarget({ id: conversation.id, title: conversation.title || "Untitled conversation" });
+                          setRenameValue(conversation.title || "Untitled conversation");
+                          setActiveMenu(null);
                         }}
                         onDelete={() => onDeleteConversation?.(conversation.id)}
                       />
@@ -245,7 +293,7 @@ export function ChatSidebar({
               {!authenticated && !collapsed && (
                 <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">Login to see your saved conversations.</p>
               )}
-              {authenticated && conversations.length === 0 && !collapsed && (
+              {authenticated && visibleConversations.length === 0 && !collapsed && (
                 <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">No conversations yet. Start a new chat.</p>
               )}
             </div>
@@ -290,7 +338,65 @@ export function ChatSidebar({
           )}
         </button>
       </div>
+      {projectModalOpen && !collapsed && (
+        <SidebarModal title="Create project" onClose={() => setProjectModalOpen(false)}>
+          <input
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+            autoFocus
+            placeholder="Project name"
+            className="h-11 w-full rounded-xl border border-[#DDE5F0] px-3 font-body text-sm font-semibold outline-none focus:border-[#4F46E5]"
+          />
+          <button
+            type="button"
+            disabled={!projectName.trim()}
+            onClick={() => {
+              onCreateProject?.(projectName.trim());
+              setProjectName("");
+              setProjectModalOpen(false);
+            }}
+            className="mt-3 h-10 w-full rounded-xl bg-[#111827] font-body text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Create project
+          </button>
+        </SidebarModal>
+      )}
+      {renameTarget && !collapsed && (
+        <SidebarModal title="Rename chat" onClose={() => setRenameTarget(null)}>
+          <input
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            autoFocus
+            className="h-11 w-full rounded-xl border border-[#DDE5F0] px-3 font-body text-sm font-semibold outline-none focus:border-[#4F46E5]"
+          />
+          <button
+            type="button"
+            disabled={!renameValue.trim()}
+            onClick={() => {
+              onRenameConversation?.(renameTarget.id, renameValue.trim());
+              setRenameTarget(null);
+            }}
+            className="mt-3 h-10 w-full rounded-xl bg-[#111827] font-body text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save name
+          </button>
+        </SidebarModal>
+      )}
     </aside>
+  );
+}
+
+function SidebarModal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="absolute inset-x-2 bottom-24 z-40 rounded-2xl border border-[#E8EEF7] bg-white p-3 shadow-2xl shadow-slate-900/15">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="font-body text-sm font-bold text-[#111827]">{title}</p>
+        <button type="button" onClick={onClose} className="grid h-7 w-7 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F5FA]">
+          <X size={15} />
+        </button>
+      </div>
+      {children}
+    </div>
   );
 }
 

@@ -29,10 +29,13 @@ type Conversation = {
   status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
   provider: string;
   model: string;
+  pinned?: boolean;
+  projectId?: string | null;
   messages?: ChatMessage[];
   logs?: Array<{ latencyMs: number; status: string; totalTokens: number }>;
 };
 
+type Project = { id: string; name: string };
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
 
 const defaultProvider: ProviderName = "Groq";
@@ -59,6 +62,8 @@ export function ChatWorkspace() {
   const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -93,10 +98,14 @@ export function ChatWorkspace() {
     if (activeUser) void refreshConversations();
   }, [activeUser?.email]);
 
+  useEffect(() => {
+    setProjects(readWorkspaceProjects());
+  }, []);
+
   async function refreshConversations() {
     try {
       const items = await zynexApi<Conversation[]>("/api/v1/conversations/ZyNexAPI01ConversationsList");
-      setConversations(items);
+      setConversations(mergeLocalConversationState(items));
       const nextActive = items.find((conversation) => conversation.status === "ACTIVE") || items[0] || null;
       if (!activeConversationId && nextActive) {
         setActiveConversationId(nextActive.id);
@@ -120,9 +129,22 @@ export function ChatWorkspace() {
       method: "POST",
       body: JSON.stringify({ title: "New conversation", provider, model })
     });
-    setConversations((items) => [conversation, ...items]);
-    setActiveConversationId(conversation.id);
+    const nextConversation = attachConversationToActiveProject(conversation);
+    setConversations((items) => sortConversations([nextConversation, ...items]));
+    setActiveConversationId(nextConversation.id);
     setChatMessages([]);
+  }
+
+  function createProject(name: string) {
+    const project = { id: `project-${Date.now()}`, name };
+    const nextProjects = [project, ...projects];
+    setProjects(nextProjects);
+    setActiveProjectId(project.id);
+    writeWorkspaceProjects(nextProjects);
+  }
+
+  function selectProject(projectId: string | null) {
+    setActiveProjectId(projectId);
   }
 
   async function selectConversation(conversation: Conversation) {
@@ -156,10 +178,25 @@ export function ChatWorkspace() {
 
   function pinConversation(conversationId: string) {
     setConversations((items) => {
-      const pinned = items.find((conversation) => conversation.id === conversationId);
-      if (!pinned) return items;
-      return [pinned, ...items.filter((conversation) => conversation.id !== conversationId)];
+      const next = items.map((conversation) => conversation.id === conversationId ? { ...conversation, pinned: !conversation.pinned } : conversation);
+      writePinnedConversationIds(next.filter((conversation) => conversation.pinned).map((conversation) => conversation.id));
+      return sortConversations(next);
     });
+  }
+
+  function likeConversation(item: { id: string; title: string; preview: string }) {
+    const liked = readLikedChats().filter((chat) => chat.id !== item.id);
+    const nextLiked = [{ ...item, likedAt: new Date().toISOString() }, ...liked].slice(0, 50);
+    window.localStorage.setItem("zynex-liked-chats", JSON.stringify(nextLiked));
+    window.dispatchEvent(new Event("zynex-liked-chats-updated"));
+  }
+
+  function attachConversationToActiveProject(conversation: Conversation) {
+    if (!activeProjectId) return conversation;
+    const map = readProjectConversationMap();
+    map[conversation.id] = activeProjectId;
+    window.localStorage.setItem("zynex-project-conversations", JSON.stringify(map));
+    return { ...conversation, projectId: activeProjectId };
   }
 
   async function sendPrompt(overridePrompt?: string) {
@@ -181,7 +218,8 @@ export function ChatWorkspace() {
         });
         conversationId = conversation.id;
         setActiveConversationId(conversation.id);
-        setConversations((items) => [conversation, ...items]);
+        const nextConversation = attachConversationToActiveProject(conversation);
+        setConversations((items) => sortConversations([nextConversation, ...items]));
       }
 
       const optimisticMessage: ChatMessage = {
@@ -245,8 +283,12 @@ export function ChatWorkspace() {
           authenticated={Boolean(activeUser)}
           onLoginClick={() => openAuth("login")}
           conversations={conversations}
+          projects={projects}
+          activeProjectId={activeProjectId}
           activeConversationId={activeConversationId}
           onNewChat={createConversation}
+          onCreateProject={createProject}
+          onSelectProject={selectProject}
           onSelectConversation={selectConversation}
           onPinConversation={pinConversation}
           onRenameConversation={renameConversation}
@@ -280,6 +322,7 @@ export function ChatWorkspace() {
             if (lastUserMessage) void sendPrompt(lastUserMessage.content);
           }}
           onEditPrompt={(content) => setPrompt(content)}
+          onLikeConversation={likeConversation}
           provider={provider}
           model={model}
           onProviderChange={(nextProvider) => {
@@ -314,4 +357,58 @@ export function ChatWorkspace() {
       )}
     </main>
   );
+}
+
+function mergeLocalConversationState(items: Conversation[]) {
+  const pinnedIds = new Set(readPinnedConversationIds());
+  const projectMap = readProjectConversationMap();
+  return sortConversations(items.map((conversation) => ({
+    ...conversation,
+    pinned: pinnedIds.has(conversation.id),
+    projectId: projectMap[conversation.id] || null
+  })));
+}
+
+function sortConversations(items: Conversation[]) {
+  return [...items].sort((first, second) => Number(Boolean(second.pinned)) - Number(Boolean(first.pinned)));
+}
+
+function readWorkspaceProjects(): Project[] {
+  try {
+    return JSON.parse(window.localStorage.getItem("zynex-projects") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeWorkspaceProjects(projects: Project[]) {
+  window.localStorage.setItem("zynex-projects", JSON.stringify(projects));
+}
+
+function readPinnedConversationIds(): string[] {
+  try {
+    return JSON.parse(window.localStorage.getItem("zynex-pinned-conversations") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writePinnedConversationIds(ids: string[]) {
+  window.localStorage.setItem("zynex-pinned-conversations", JSON.stringify(ids));
+}
+
+function readProjectConversationMap(): Record<string, string> {
+  try {
+    return JSON.parse(window.localStorage.getItem("zynex-project-conversations") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function readLikedChats(): Array<{ id: string; title: string; preview: string; likedAt: string }> {
+  try {
+    return JSON.parse(window.localStorage.getItem("zynex-liked-chats") || "[]");
+  } catch {
+    return [];
+  }
 }

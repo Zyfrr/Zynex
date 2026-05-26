@@ -35,6 +35,7 @@ type ChatMainProps = {
   onCancelConversation?: () => void;
   onRegenerate?: () => void;
   onEditPrompt?: (content: string) => void;
+  onLikeConversation?: (conversation: { id: string; title: string; preview: string }) => void;
   provider: ProviderName;
   model: string;
   onProviderChange: (provider: ProviderName) => void;
@@ -62,6 +63,7 @@ export function ChatMain({
   onCancelConversation,
   onRegenerate,
   onEditPrompt,
+  onLikeConversation,
   provider,
   model,
   onProviderChange,
@@ -249,11 +251,11 @@ export function ChatMain({
         <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 ${hasMessages ? "" : "flex items-center justify-center"}`}>
           {hasMessages ? (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-              {messages.map((message) => (
+              {messages.map((message, messageIndex) => (
                 <div key={message.id} className={`flex flex-col ${message.role === "USER" ? "items-end" : "items-start"}`}>
-                  <div className={`max-w-[86%] ${message.role === "USER" ? "text-right" : "text-left"}`}>
+                  <div className={`${message.role === "USER" ? "max-w-[86%] text-right" : "w-full max-w-full text-left"}`}>
                     <div
-                      className={`rounded-2xl px-4 py-3 font-body text-sm leading-6 shadow-sm ${
+                      className={`w-full rounded-2xl px-4 py-3 font-body text-sm leading-6 shadow-sm ${
                         message.role === "USER"
                           ? "bg-[#111827] text-white"
                           : "border border-[#E8EEF7] bg-white text-[#253248]"
@@ -278,10 +280,20 @@ export function ChatMain({
                           <MessageAction label="Regenerate" onClick={onRegenerate}>
                             <RefreshCcw size={14} />
                           </MessageAction>
+                          <MessageAction label="Download response" onClick={() => exportSingleMessageAsWord(message, conversation?.title || "zynex-response")}>
+                            <Download size={14} />
+                          </MessageAction>
                           <MessageAction label="Share">
                             <Share2 size={14} />
                           </MessageAction>
-                          <MessageAction label="Good response">
+                          <MessageAction
+                            label="Good response"
+                            onClick={() => onLikeConversation?.({
+                              id: conversation?.id || message.id,
+                              title: conversation?.title || "Untitled conversation",
+                              preview: message.content.slice(0, 180)
+                            })}
+                          >
                             <ThumbsUp size={14} />
                           </MessageAction>
                           <MessageAction label="Bad response">
@@ -290,6 +302,11 @@ export function ChatMain({
                         </>
                       )}
                     </div>
+                    {message.role === "ASSISTANT" && responseVersionLabel(messages, messageIndex) && (
+                      <p className="mt-1.5 font-body text-[11px] font-semibold text-[#8A94A6]">
+                        {responseVersionLabel(messages, messageIndex)}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -527,7 +544,7 @@ function CodeBlock({ id, language, code, onCopy, copiedId }: { id: string; langu
         </div>
       </div>
       {editing ? (
-        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="min-h-48 w-full resize-y bg-[#020617] p-4 font-mono text-xs leading-6 text-slate-100 outline-none" />
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="block min-h-48 w-full min-w-0 resize-y bg-[#020617] p-4 font-mono text-xs leading-6 text-slate-100 outline-none" />
       ) : (
         <pre className="overflow-x-auto bg-[#1E1E1E] p-4 text-xs leading-6 text-slate-100"><code>{highlightCode(draft, language)}</code></pre>
       )}
@@ -628,6 +645,10 @@ function isHtmlBlock(language: string, code: string) {
 function exportConversationAsWord(messages: ChatMainProps["messages"], title: string) {
   const html = buildConversationHtml(messages || [], title);
   downloadBlob(`${safeFileName(title)}.doc`, new Blob([html], { type: "application/msword;charset=utf-8" }));
+}
+
+function exportSingleMessageAsWord(message: NonNullable<ChatMainProps["messages"]>[number], title: string) {
+  downloadBlob(`${safeFileName(title)}-response.doc`, new Blob([buildConversationHtml([message], `${title} response`)], { type: "application/msword;charset=utf-8" }));
 }
 
 function exportConversationAsPdf(messages: ChatMainProps["messages"], title: string) {
@@ -743,4 +764,27 @@ function escapeHtml(value: string) {
     '"': "&quot;",
     "'": "&#39;"
   }[character] || character));
+}
+
+function responseVersionLabel(messages: NonNullable<ChatMainProps["messages"]>, assistantIndex: number) {
+  const prompt = findPreviousUserPrompt(messages, assistantIndex);
+  if (!prompt) return "";
+
+  let total = 0;
+  let current = 0;
+  for (let index = 0; index < messages.length; index += 1) {
+    if (messages[index].role === "ASSISTANT" && findPreviousUserPrompt(messages, index) === prompt) {
+      total += 1;
+      if (index <= assistantIndex) current += 1;
+    }
+  }
+
+  return total > 1 ? `Response ${current} of ${total}` : "";
+}
+
+function findPreviousUserPrompt(messages: NonNullable<ChatMainProps["messages"]>, fromIndex: number) {
+  for (let index = fromIndex - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "USER") return messages[index].content.trim();
+  }
+  return "";
 }

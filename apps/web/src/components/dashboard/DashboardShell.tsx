@@ -287,7 +287,7 @@ export function DashboardShell() {
           <div className="p-4 sm:p-6">
             {activePage === "overview" && <OverviewPage />}
             {activePage === "profile" && <ProfilePage onEditRoute={() => navigateDashboard("profile", "edit-profile")} />}
-            {activePage === "conversations" && <StaticPage kind="conversations" />}
+            {activePage === "conversations" && <ConversationsDashboardPage />}
             {activePage === "inference" && <StaticPage kind="inference" />}
             {activePage === "providers" && <StaticPage kind="providers" />}
             {activePage === "recharge" && <RechargePage />}
@@ -717,6 +717,91 @@ function StaticPage({ kind }: { kind: Exclude<DashboardPage, "overview" | "profi
       <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <ChartCard title={config.chartTitle} icon={config.icon}>
           <ResponsiveContainer width="100%" height={310}>
+            <LineChart data={latency}>
+              <CartesianGrid stroke="#E8EEF7" />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Line dataKey="avg" stroke="#4F46E5" strokeWidth={2} />
+              <Line dataKey="p95" stroke="#06B6D4" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <Panel>
+          <h3 className="font-display text-2xl font-semibold">{config.sideTitle}</h3>
+          <div className="mt-4 space-y-3">
+            {config.items.map((item) => (
+              <div key={item} className="flex items-center gap-3 rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-3">
+                <CheckCircle2 size={17} className="text-emerald-500" />
+                <span className="font-body text-sm font-semibold text-[#334155]">{item}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+      <DataTable title={config.tableTitle} columns={config.columns} rows={config.rows} />
+    </div>
+  );
+}
+
+function ConversationsDashboardPage() {
+  const config = staticPageConfig.conversations;
+  const [likedChats, setLikedChats] = useState<Array<{ id: string; title: string; preview: string; likedAt: string }>>([]);
+
+  useEffect(() => {
+    function loadLikedChats() {
+      try {
+        setLikedChats(JSON.parse(window.localStorage.getItem("zynex-liked-chats") || "[]"));
+      } catch {
+        setLikedChats([]);
+      }
+    }
+
+    loadLikedChats();
+    window.addEventListener("zynex-liked-chats-updated", loadLikedChats);
+    window.addEventListener("storage", loadLikedChats);
+    return () => {
+      window.removeEventListener("zynex-liked-chats-updated", loadLikedChats);
+      window.removeEventListener("storage", loadLikedChats);
+    };
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        {config.metrics.map((metric) => (
+          <MetricCard key={metric.label} {...metric} />
+        ))}
+      </div>
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-body text-xs font-bold uppercase text-[#4F46E5]">Liked responses</p>
+            <h3 className="font-display text-2xl font-semibold">Chats marked useful</h3>
+          </div>
+          <span className="rounded-full bg-[#EEF2FF] px-3 py-1 font-body text-xs font-bold text-[#4F46E5]">{likedChats.length} saved</span>
+        </div>
+        <div className="mt-4 grid gap-3">
+          {likedChats.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#DDE5F0] bg-[#F8FAFC] p-4 font-body text-sm font-semibold text-[#64748B]">
+              Like an assistant response in the workspace to pin it here for review.
+            </p>
+          ) : (
+            likedChats.map((chat) => (
+              <article key={chat.id} className="rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h4 className="font-body text-sm font-bold text-[#111827]">{chat.title}</h4>
+                  <span className="font-body text-xs font-semibold text-[#64748B]">{new Date(chat.likedAt).toLocaleString()}</span>
+                </div>
+                <p className="mt-2 line-clamp-2 font-body text-sm leading-6 text-[#475569]">{chat.preview}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </Panel>
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <ChartCard title={config.chartTitle} icon={config.icon}>
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart data={latency}>
               <CartesianGrid stroke="#E8EEF7" />
               <XAxis dataKey="time" />

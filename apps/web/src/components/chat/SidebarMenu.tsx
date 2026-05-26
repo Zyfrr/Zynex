@@ -5,6 +5,7 @@ import {
   FolderOpen,
   MoreHorizontal,
   Pin,
+  PinOff,
   Trash2
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -15,7 +16,8 @@ export function SidebarSection({
   title,
   open,
   onToggle,
-  actionIcon
+  actionIcon,
+  onAction
 }: {
   collapsed: boolean;
   icon: ReactNode;
@@ -23,6 +25,7 @@ export function SidebarSection({
   open: boolean;
   onToggle: () => void;
   actionIcon?: ReactNode;
+  onAction?: () => void;
 }) {
   if (collapsed) {
     return (
@@ -44,7 +47,7 @@ export function SidebarSection({
         <ChevronDown size={15} className={`transition ${open ? "" : "-rotate-90"}`} />
       </button>
       {actionIcon && (
-        <button className="grid h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F5FA] hover:text-[#4F46E5]">
+        <button type="button" onClick={onAction} className="grid h-8 w-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F3F5FA] hover:text-[#4F46E5]">
           {actionIcon}
         </button>
       )}
@@ -62,7 +65,10 @@ export function ListRow({
   onClick,
   onPin,
   onRename,
-  onDelete
+  onDelete,
+  pinned = false,
+  menuId,
+  showActions = true
 }: {
   collapsed: boolean;
   title: string;
@@ -74,7 +80,11 @@ export function ListRow({
   onPin?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  pinned?: boolean;
+  menuId?: string;
+  showActions?: boolean;
 }) {
+  const currentMenuId = menuId || title;
   if (collapsed) {
     return (
       <button onClick={onClick} className="grid h-10 w-full place-items-center rounded-xl text-[#6B7280] hover:bg-[#F3F5FA] hover:text-[#4F46E5]">
@@ -86,23 +96,26 @@ export function ListRow({
   return (
     <div className="group relative flex h-10 items-center gap-2 rounded-xl px-3 text-[#4C596C] transition hover:bg-[#F3F5FA] hover:text-[#111827]">
       <button type="button" aria-label={`Open ${title}`} onClick={onClick} className="absolute inset-0 rounded-xl" />
-      <span className="shrink-0 text-[#6B7280]">{leadingIcon}</span>
+      <span className={`shrink-0 ${pinned ? "text-[#4F46E5]" : "text-[#6B7280]"}`}>{leadingIcon}</span>
       <span className="min-w-0 flex-1 truncate font-body text-[13px] font-medium">{title}</span>
+      {pinned && <Pin size={13} className="shrink-0 fill-[#4F46E5] text-[#4F46E5]" />}
       {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />}
-      <button
-        type="button"
-        aria-label={`Actions for ${title}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          setActiveMenu(activeMenu === title ? null : title);
-        }}
-        className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A94A6] opacity-0 transition hover:bg-white hover:text-[#4F46E5] group-hover:opacity-100"
-      >
-        <MoreHorizontal size={16} />
-      </button>
-      {activeMenu === title && (
+      {showActions && (
+        <button
+          type="button"
+          aria-label={`Actions for ${title}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setActiveMenu(activeMenu === currentMenuId ? null : currentMenuId);
+          }}
+          className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A94A6] opacity-0 transition hover:bg-white hover:text-[#4F46E5] group-hover:opacity-100"
+        >
+          <MoreHorizontal size={16} />
+        </button>
+      )}
+      {showActions && activeMenu === currentMenuId && (
         <div className="absolute right-2 top-9 z-30 w-44 rounded-xl border border-[#E8EEF7] bg-white p-1.5 shadow-2xl shadow-slate-900/12">
-          <MenuAction icon={<Pin size={14} />} label="Pin to top" onClick={onPin} />
+          <MenuAction icon={pinned ? <PinOff size={14} /> : <Pin size={14} />} label={pinned ? "Unpin" : "Pin to top"} onClick={onPin} />
           <MenuAction icon={<FolderOpen size={14} />} label="Open" onClick={onClick} />
           <MenuAction icon={<Archive size={14} />} label="Rename" onClick={onRename} />
           <MenuAction icon={<Trash2 size={14} />} label="Delete" danger onClick={onDelete} />
