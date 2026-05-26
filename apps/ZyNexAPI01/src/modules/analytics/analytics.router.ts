@@ -11,7 +11,7 @@ analyticsRouter.get(
     const userId = getUserIdFromRequest(req);
     if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
 
-    const [summary, totalInferenceCalls, errorCalls, providerGroups, recentLogs, conversations] = await Promise.all([
+    const [summary, totalInferenceCalls, errorCalls, providerGroups, recentLogs, conversations, recentConversations] = await Promise.all([
       prisma.inferenceLog.aggregate({
         where: { userId },
         _avg: { latencyMs: true },
@@ -29,11 +29,27 @@ analyticsRouter.get(
         orderBy: { createdAt: "desc" },
         take: 8
       }),
-      prisma.conversation.count({ where: { userId } })
+      prisma.conversation.count({ where: { userId } }),
+      prisma.conversation.findMany({
+        where: { userId, status: { not: "ARCHIVED" } },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+        include: {
+          messages: { orderBy: { createdAt: "desc" }, take: 1 },
+          logs: { orderBy: { createdAt: "desc" }, take: 1 }
+        }
+      })
     ]);
 
     const latencyValues = recentLogs.map((log) => log.latencyMs).sort((a, b) => a - b);
     const p95Index = latencyValues.length ? Math.ceil(latencyValues.length * 0.95) - 1 : 0;
+    const trend = [...recentLogs].reverse().map((log) => ({
+      time: log.createdAt.toISOString().slice(11, 16),
+      avg: log.latencyMs,
+      p95: Math.max(log.latencyMs, latencyValues[p95Index] || log.latencyMs),
+      errors: log.status === "ERROR" ? 1 : 0,
+      tokens: log.totalTokens
+    }));
 
     res.json({
       success: true,
@@ -48,6 +64,13 @@ analyticsRouter.get(
           name: group.provider,
           value: group._count.provider
         })),
+        latencyTrend: trend,
+        tokenTrend: trend.map((item) => ({
+          day: item.time,
+          prompt: Math.round(item.tokens * 0.58),
+          completion: Math.round(item.tokens * 0.42),
+          cache: 0
+        })),
         recentLogs: recentLogs.map((log) => ({
           requestId: log.requestId,
           provider: log.provider,
@@ -56,6 +79,17 @@ analyticsRouter.get(
           latencyMs: log.latencyMs,
           totalTokens: log.totalTokens,
           createdAt: log.createdAt
+        })),
+        recentConversations: recentConversations.map((conversation) => ({
+          id: conversation.id,
+          title: conversation.title || "Untitled conversation",
+          status: conversation.status,
+          provider: conversation.provider,
+          model: conversation.model,
+          updatedAt: conversation.updatedAt,
+          lastMessage: conversation.messages[0]?.content || "",
+          lastLatencyMs: conversation.logs[0]?.latencyMs || 0,
+          lastTokens: conversation.logs[0]?.totalTokens || 0
         }))
       }
     });

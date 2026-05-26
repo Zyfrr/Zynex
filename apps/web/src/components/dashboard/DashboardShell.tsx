@@ -100,6 +100,20 @@ type ApiUser = {
   } | null;
 };
 
+type AnalyticsOverview = {
+  totalInferenceCalls: number;
+  totalConversations: number;
+  averageLatencyMs: number;
+  p95LatencyMs: number;
+  errorRate: number;
+  totalTokens: number;
+  providerMix: Array<{ name: string; value: number }>;
+  latencyTrend: Array<{ time: string; avg: number; p95: number; errors: number; tokens: number }>;
+  tokenTrend: Array<{ day: string; prompt: number; completion: number; cache: number }>;
+  recentLogs: Array<{ requestId: string; provider: string; model: string; status: string; latencyMs: number; totalTokens: number; createdAt: string }>;
+  recentConversations: Array<{ id: string; title: string; status: string; provider: string; model: string; updatedAt: string; lastMessage: string; lastLatencyMs: number; lastTokens: number }>;
+};
+
 const navItems: Array<{ id: DashboardPage; label: string; icon: React.ReactNode }> = [
   { id: "overview", label: "Overview", icon: <Gauge size={18} /> },
   { id: "profile", label: "My Profile", icon: <UserRound size={18} /> },
@@ -204,12 +218,30 @@ const rows = [
 
 export function DashboardShell() {
   const [activePage, setActivePage] = useState<DashboardPage>("overview");
+  const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const pageTitle = navItems.find((item) => item.id === activePage)?.label || "Dashboard";
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("zx");
     const page = decodeDashboardPage(code);
     if (page) setActivePage(page);
+  }, []);
+
+  useEffect(() => {
+    async function loadAnalytics() {
+      try {
+        setAnalyticsLoading(true);
+        setAnalytics(await zynexApi<AnalyticsOverview>("/api/v1/analytics/ZyNexAPI01AnalyticsOverview"));
+      } catch (error) {
+        showDashboardError(error);
+        setAnalytics(null);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    }
+
+    void loadAnalytics();
   }, []);
 
   function navigateDashboard(page: DashboardPage, mode?: string) {
@@ -285,11 +317,11 @@ export function DashboardShell() {
           </header>
 
           <div className="p-4 sm:p-6">
-            {activePage === "overview" && <OverviewPage />}
+            {activePage === "overview" && <OverviewPage analytics={analytics} loading={analyticsLoading} />}
             {activePage === "profile" && <ProfilePage onEditRoute={() => navigateDashboard("profile", "edit-profile")} />}
-            {activePage === "conversations" && <ConversationsDashboardPage />}
-            {activePage === "inference" && <StaticPage kind="inference" />}
-            {activePage === "providers" && <StaticPage kind="providers" />}
+            {activePage === "conversations" && <ConversationsDashboardPage analytics={analytics} loading={analyticsLoading} />}
+            {activePage === "inference" && <InferenceDashboardPage analytics={analytics} loading={analyticsLoading} />}
+            {activePage === "providers" && <ProvidersDashboardPage analytics={analytics} loading={analyticsLoading} />}
             {activePage === "recharge" && <RechargePage />}
             {activePage === "billing" && <StaticPage kind="billing" />}
             {activePage === "security" && <StaticPage kind="security" />}
@@ -305,19 +337,24 @@ export function DashboardShell() {
   );
 }
 
-function OverviewPage() {
+function OverviewPage({ analytics, loading }: { analytics: AnalyticsOverview | null; loading: boolean }) {
+  const liveLatency = analytics?.latencyTrend?.length ? analytics.latencyTrend : emptyLatencyTrend();
+  const liveProviderMix = withProviderColors(analytics?.providerMix);
+  const liveTokenUsage = analytics?.tokenTrend?.length ? analytics.tokenTrend : emptyTokenTrend();
+  const liveRows = analyticsRows(analytics);
+
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={<MessageSquare />} label="Conversations" value="18,420" delta="+12.8%" />
-        <MetricCard icon={<Clock3 />} label="P95 latency" value="908ms" delta="-4.1%" />
-        <MetricCard icon={<Sparkles />} label="Tokens used" value="4.8M" delta="+18.2%" />
-        <MetricCard icon={<AlertTriangle />} label="Error rate" value="0.38%" delta="-0.06%" />
+        <MetricCard icon={<MessageSquare />} label="Conversations" value={loading ? "..." : formatNumber(analytics?.totalConversations || 0)} delta="Live" />
+        <MetricCard icon={<Clock3 />} label="P95 latency" value={loading ? "..." : `${analytics?.p95LatencyMs || 0}ms`} delta="Live" />
+        <MetricCard icon={<Sparkles />} label="Tokens used" value={loading ? "..." : formatNumber(analytics?.totalTokens || 0)} delta="Live" />
+        <MetricCard icon={<AlertTriangle />} label="Error rate" value={loading ? "..." : `${analytics?.errorRate || 0}%`} delta="Live" />
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.4fr_0.9fr]">
         <ChartCard title="Latency and errors" icon={<AreaChartIcon size={18} />}>
           <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={latency}>
+            <ComposedChart data={liveLatency}>
               <CartesianGrid stroke="#E8EEF7" />
               <XAxis dataKey="time" />
               <YAxis />
@@ -331,8 +368,8 @@ function OverviewPage() {
         <ChartCard title="Provider mix" icon={<PieChartIcon size={18} />}>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
-              <Pie data={providerMix} dataKey="value" nameKey="name" innerRadius={62} outerRadius={104} paddingAngle={4}>
-                {providerMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+              <Pie data={liveProviderMix} dataKey="value" nameKey="name" innerRadius={62} outerRadius={104} paddingAngle={4}>
+                {liveProviderMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
               </Pie>
               <Tooltip />
               <Legend />
@@ -343,7 +380,7 @@ function OverviewPage() {
       <div className="grid gap-5 xl:grid-cols-3">
         <ChartCard title="Token usage" icon={<BarChart3 size={18} />}>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={tokenUsage}>
+            <BarChart data={liveTokenUsage}>
               <CartesianGrid stroke="#E8EEF7" />
               <XAxis dataKey="day" />
               <YAxis />
@@ -378,7 +415,7 @@ function OverviewPage() {
           </ResponsiveContainer>
         </ChartCard>
       </div>
-      <DataTable title="Recent inference requests" columns={["Request", "Provider", "Status", "Latency", "Tokens"]} rows={rows} />
+      <DataTable title="Recent inference requests" columns={["Request", "Provider", "Status", "Latency", "Tokens"]} rows={liveRows} />
     </div>
   );
 }
@@ -744,9 +781,18 @@ function StaticPage({ kind }: { kind: Exclude<DashboardPage, "overview" | "profi
   );
 }
 
-function ConversationsDashboardPage() {
+function ConversationsDashboardPage({ analytics, loading }: { analytics: AnalyticsOverview | null; loading: boolean }) {
   const config = staticPageConfig.conversations;
   const [likedChats, setLikedChats] = useState<Array<{ id: string; title: string; preview: string; likedAt: string }>>([]);
+  const conversationRows = analytics?.recentConversations?.length
+    ? analytics.recentConversations.map((conversation) => [
+        conversation.title,
+        conversation.provider,
+        conversation.status,
+        `${conversation.lastLatencyMs || 0}ms`,
+        formatDate(conversation.updatedAt)
+      ])
+    : [["No conversations yet", "Start chatting", "Empty", "0ms", "-"]];
 
   useEffect(() => {
     function loadLikedChats() {
@@ -769,9 +815,9 @@ function ConversationsDashboardPage() {
   return (
     <div className="space-y-5">
       <div className="grid gap-4 md:grid-cols-3">
-        {config.metrics.map((metric) => (
-          <MetricCard key={metric.label} {...metric} />
-        ))}
+        <MetricCard icon={<MessageSquare />} label="Total conversations" value={loading ? "..." : formatNumber(analytics?.totalConversations || 0)} delta="Live" />
+        <MetricCard icon={<Sparkles />} label="Liked responses" value={formatNumber(likedChats.length)} delta="Local" />
+        <MetricCard icon={<Clock3 />} label="Avg latency" value={loading ? "..." : `${analytics?.averageLatencyMs || 0}ms`} delta="Live" />
       </div>
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -802,7 +848,7 @@ function ConversationsDashboardPage() {
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <ChartCard title={config.chartTitle} icon={config.icon}>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={latency}>
+            <LineChart data={analytics?.latencyTrend?.length ? analytics.latencyTrend : emptyLatencyTrend()}>
               <CartesianGrid stroke="#E8EEF7" />
               <XAxis dataKey="time" />
               <YAxis />
@@ -824,7 +870,99 @@ function ConversationsDashboardPage() {
           </div>
         </Panel>
       </div>
-      <DataTable title={config.tableTitle} columns={config.columns} rows={config.rows} />
+      <DataTable title="Recent conversations" columns={["Title", "Provider", "State", "Last latency", "Updated"]} rows={conversationRows} />
+    </div>
+  );
+}
+
+function InferenceDashboardPage({ analytics, loading }: { analytics: AnalyticsOverview | null; loading: boolean }) {
+  const config = staticPageConfig.inference;
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard icon={<ClipboardList />} label="Inference calls" value={loading ? "..." : formatNumber(analytics?.totalInferenceCalls || 0)} delta="Live" />
+        <MetricCard icon={<Clock3 />} label="Average latency" value={loading ? "..." : `${analytics?.averageLatencyMs || 0}ms`} delta="Live" />
+        <MetricCard icon={<AlertTriangle />} label="Error rate" value={loading ? "..." : `${analytics?.errorRate || 0}%`} delta="Live" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <ChartCard title={config.chartTitle} icon={config.icon}>
+          <ResponsiveContainer width="100%" height={310}>
+            <LineChart data={analytics?.latencyTrend?.length ? analytics.latencyTrend : emptyLatencyTrend()}>
+              <CartesianGrid stroke="#E8EEF7" />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Line dataKey="avg" stroke="#4F46E5" strokeWidth={2} />
+              <Line dataKey="p95" stroke="#06B6D4" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <Panel>
+          <h3 className="font-display text-2xl font-semibold">Live log health</h3>
+          <div className="mt-4 space-y-3">
+            {[
+              `Total tokens: ${formatNumber(analytics?.totalTokens || 0)}`,
+              `Recent logs: ${formatNumber(analytics?.recentLogs?.length || 0)}`,
+              `P95 latency: ${analytics?.p95LatencyMs || 0}ms`,
+              `Error rate: ${analytics?.errorRate || 0}%`
+            ].map((item) => (
+              <div key={item} className="flex items-center gap-3 rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-3">
+                <CheckCircle2 size={17} className="text-emerald-500" />
+                <span className="font-body text-sm font-semibold text-[#334155]">{item}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+      <DataTable title="Inference log stream" columns={["Request", "Provider", "Status", "Latency", "Tokens"]} rows={analyticsRows(analytics)} />
+    </div>
+  );
+}
+
+function ProvidersDashboardPage({ analytics, loading }: { analytics: AnalyticsOverview | null; loading: boolean }) {
+  const config = staticPageConfig.providers;
+  const liveProviderMix = withProviderColors(analytics?.providerMix);
+  const providerRows = liveProviderMix.map((provider) => [
+    provider.name,
+    String(provider.value),
+    `${analytics?.totalInferenceCalls ? Math.round((provider.value / analytics.totalInferenceCalls) * 100) : 0}%`,
+    "Active",
+    loading ? "..." : `${analytics?.averageLatencyMs || 0}ms avg`
+  ]);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard icon={<Server />} label="Active providers" value={loading ? "..." : formatNumber(liveProviderMix.length)} delta="Live" />
+        <MetricCard icon={<Sparkles />} label="Provider calls" value={loading ? "..." : formatNumber(analytics?.totalInferenceCalls || 0)} delta="Live" />
+        <MetricCard icon={<Clock3 />} label="Avg provider latency" value={loading ? "..." : `${analytics?.averageLatencyMs || 0}ms`} delta="Live" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <ChartCard title={config.chartTitle} icon={config.icon}>
+          <ResponsiveContainer width="100%" height={310}>
+            <PieChart>
+              <Pie data={liveProviderMix} dataKey="value" nameKey="name" innerRadius={62} outerRadius={104} paddingAngle={4}>
+                {liveProviderMix.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <Panel>
+          <h3 className="font-display text-2xl font-semibold">Model routing</h3>
+          <div className="mt-4 space-y-3">
+            {(analytics?.recentLogs || []).slice(0, 4).map((log) => (
+              <div key={log.requestId} className="rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-3">
+                <p className="font-body text-sm font-bold text-[#111827]">{log.provider}</p>
+                <p className="mt-1 truncate font-body text-xs font-semibold text-[#64748B]">{log.model}</p>
+              </div>
+            ))}
+            {!analytics?.recentLogs?.length && <p className="font-body text-sm font-semibold text-[#64748B]">No provider calls yet.</p>}
+          </div>
+        </Panel>
+      </div>
+      <DataTable title="Provider matrix" columns={["Provider", "Calls", "Share", "State", "Latency"]} rows={providerRows.length ? providerRows : [["No provider data", "0", "0%", "Waiting", "0ms"]]} />
     </div>
   );
 }
@@ -870,6 +1008,42 @@ function pageConfig(icon: React.ReactNode, chartTitle: string, sideTitle: string
       ["ZYN-003", "Ops", "Active", "2 days ago", "91"]
     ]
   };
+}
+
+function withProviderColors(items?: Array<{ name: string; value: number }>) {
+  const palette = ["#4F46E5", "#06B6D4", "#10B981", "#64748B", "#F59E0B"];
+  const values = items?.length ? items : [{ name: "No calls yet", value: 1 }];
+  return values.map((item, index) => ({ ...item, color: palette[index % palette.length] }));
+}
+
+function analyticsRows(analytics: AnalyticsOverview | null) {
+  const logs = analytics?.recentLogs || [];
+  if (!logs.length) return [["No requests yet", "Waiting", "Empty", "0ms", "0"]];
+  return logs.map((log) => [
+    log.requestId,
+    log.provider,
+    log.status,
+    `${log.latencyMs}ms`,
+    formatNumber(log.totalTokens)
+  ]);
+}
+
+function emptyLatencyTrend() {
+  return [{ time: "Now", avg: 0, p95: 0, errors: 0, tokens: 0 }];
+}
+
+function emptyTokenTrend() {
+  return [{ day: "Now", prompt: 0, completion: 0, cache: 0 }];
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US", { notation: value >= 100000 ? "compact" : "standard" }).format(value);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString();
 }
 
 function MetricCard({ icon, label, value, delta }: { icon: React.ReactNode; label: string; value: string; delta: string }) {
