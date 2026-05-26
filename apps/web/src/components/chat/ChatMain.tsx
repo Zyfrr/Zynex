@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Clipboard, Mail, Menu, Mic, Paperclip, Pencil, RefreshCcw, Search, Send, Share2, Sparkles, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { Check, Clipboard, Download, Eye, FileText, Mail, Menu, Mic, Paperclip, Pencil, RefreshCcw, Search, Send, Share2, Sparkles, Square, Table2, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { suggestions } from "@/components/chat/chatData";
 
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
@@ -71,7 +71,21 @@ export function ChatMain({
   const conversationCancelled = conversation?.status === "CANCELLED";
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number }>>([]);
+  const [exportOpen, setExportOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const tableCount = countMarkdownTables(messages);
+
+  useEffect(() => {
+    function closeExportMenu(event: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setExportOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", closeExportMenu);
+    return () => document.removeEventListener("mousedown", closeExportMenu);
+  }, []);
 
   async function copyText(id: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -120,6 +134,58 @@ export function ChatMain({
                 aria-label="LLM model"
                 className="h-7 w-32 rounded-full bg-[#F3F5FA] px-2 font-body text-xs font-semibold text-[#4C596C] outline-none"
               />
+            </div>
+          )}
+          {hasMessages && (
+            <div ref={exportMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setExportOpen((value) => !value)}
+                className="flex h-9 items-center gap-2 rounded-full border border-[#E8EEF7] bg-white px-3 font-body text-xs font-semibold text-[#4C596C] hover:border-[#4F46E5] hover:text-[#4F46E5] sm:text-sm"
+              >
+                <Download size={15} />
+                Export
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 top-11 z-50 w-64 rounded-2xl border border-[#E8EEF7] bg-white p-2 text-left shadow-2xl shadow-slate-900/12">
+                  <ExportAction
+                    icon={<FileText size={16} />}
+                    label="Download Word"
+                    subtext="Conversation transcript as .doc"
+                    onClick={() => {
+                      exportConversationAsWord(messages, conversation?.title || "zynex-conversation");
+                      setExportOpen(false);
+                    }}
+                  />
+                  <ExportAction
+                    icon={<FileText size={16} />}
+                    label="Download PDF"
+                    subtext="Open print view and save as PDF"
+                    onClick={() => {
+                      exportConversationAsPdf(messages, conversation?.title || "zynex-conversation");
+                      setExportOpen(false);
+                    }}
+                  />
+                  <ExportAction
+                    icon={<Table2 size={16} />}
+                    label={tableCount > 0 ? "Export tables CSV" : "Export transcript CSV"}
+                    subtext={tableCount > 0 ? `${tableCount} table${tableCount === 1 ? "" : "s"} for Sheets or Excel` : "Rows for Sheets or Excel"}
+                    onClick={() => {
+                      exportConversationAsCsv(messages, conversation?.title || "zynex-conversation");
+                      setExportOpen(false);
+                    }}
+                  />
+                  <ExportAction
+                    icon={<Table2 size={16} />}
+                    label="Download Excel"
+                    subtext="Spreadsheet-compatible .xls"
+                    onClick={() => {
+                      exportConversationAsExcel(messages, conversation?.title || "zynex-conversation");
+                      setExportOpen(false);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
           {!authenticated && (
@@ -406,6 +472,18 @@ function AttachAction({ label, subtext, onClick }: { label: string; subtext: str
   );
 }
 
+function ExportAction({ icon, label, subtext, onClick }: { icon: React.ReactNode; label: string; subtext: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[#F3F5FA]">
+      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#E8EEF7] bg-[#F8FAFC] text-[#4C596C]">{icon}</span>
+      <span>
+        <span className="block font-body text-sm font-semibold text-[#111827]">{label}</span>
+        <span className="mt-0.5 block font-body text-xs font-medium text-[#6B7280]">{subtext}</span>
+      </span>
+    </button>
+  );
+}
+
 function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
   const parts = parseCodeBlocks(content);
   return (
@@ -422,11 +500,24 @@ function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (
 function CodeBlock({ id, language, code, onCopy, copiedId }: { id: string; language: string; code: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(code);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const canPreview = isHtmlBlock(language, draft);
   return (
     <div className="overflow-hidden rounded-xl border border-[#1F2937] bg-[#0F172A] text-left">
       <div className="flex items-center justify-between border-b border-white/10 bg-[#111827] px-3 py-2">
-        <span className="font-body text-xs font-semibold text-slate-300">{language || "code"}</span>
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full bg-[#FF5F57]" />
+          <span className="h-3 w-3 rounded-full bg-[#FFBD2E]" />
+          <span className="h-3 w-3 rounded-full bg-[#28C840]" />
+          <span className="ml-2 font-body text-xs font-semibold text-slate-300">{language || "code"}</span>
+        </div>
         <div className="flex items-center gap-1">
+          {canPreview && (
+            <button type="button" onClick={() => setPreviewOpen((value) => !value)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">
+              <Eye size={13} />
+              Preview
+            </button>
+          )}
           <button type="button" onClick={() => setEditing(!editing)} className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">
             Edit
           </button>
@@ -438,7 +529,18 @@ function CodeBlock({ id, language, code, onCopy, copiedId }: { id: string; langu
       {editing ? (
         <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="min-h-48 w-full resize-y bg-[#020617] p-4 font-mono text-xs leading-6 text-slate-100 outline-none" />
       ) : (
-        <pre className="overflow-x-auto p-4 text-xs leading-6 text-slate-100"><code>{draft}</code></pre>
+        <pre className="overflow-x-auto bg-[#1E1E1E] p-4 text-xs leading-6 text-slate-100"><code>{highlightCode(draft, language)}</code></pre>
+      )}
+      {canPreview && previewOpen && (
+        <div className="border-t border-white/10 bg-[#F8FAFC] p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-body text-xs font-semibold text-[#4C596C]">Workspace preview</span>
+            <button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg px-2 py-1 font-body text-xs font-semibold text-[#6B7280] hover:bg-[#E8EEF7]">
+              Close
+            </button>
+          </div>
+          <iframe title="HTML preview" sandbox="allow-scripts" srcDoc={draft} className="h-80 w-full rounded-lg border border-[#DDE5F0] bg-white" />
+        </div>
       )}
     </div>
   );
@@ -471,4 +573,174 @@ function parseCodeBlocks(content: string) {
   }
 
   return parts.filter((part) => part.value);
+}
+
+function highlightCode(code: string, language: string) {
+  const keywords = new Set([
+    "async", "await", "break", "case", "catch", "class", "const", "continue", "CREATE", "DELETE", "def", "else", "export", "extends",
+    "false", "for", "FROM", "function", "if", "implements", "import", "in", "INSERT", "interface", "JOIN", "lambda", "let", "new",
+    "null", "or", "private", "protected", "public", "return", "SELECT", "static", "TABLE", "throw", "true", "try", "type", "undefined",
+    "UPDATE", "var", "void", "WHERE", "while"
+  ]);
+  const tokenPattern = /(\/\/.*|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b[A-Z_]{3,}\b|\b[A-Za-z_$][\w$]*\b|\b\d+(?:\.\d+)?\b|<\/?[A-Za-z][^>\s]*|[{}()[\].,;:+\-*/%=<>!&|?]+)/g;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(code))) {
+    if (match.index > lastIndex) {
+      nodes.push(code.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    nodes.push(
+      <span key={`${token}-${match.index}`} className={tokenClassName(token, keywords, language)}>
+        {token}
+      </span>
+    );
+    lastIndex = tokenPattern.lastIndex;
+  }
+
+  if (lastIndex < code.length) {
+    nodes.push(code.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function tokenClassName(token: string, keywords: Set<string>, language: string) {
+  if (/^(\/\/|\/\*|<!--)/.test(token)) return "text-[#6A9955]";
+  if (/^["'`]/.test(token)) return "text-[#CE9178]";
+  if (/^\d/.test(token)) return "text-[#B5CEA8]";
+  if (keywords.has(token)) return "text-[#569CD6]";
+  if (/^<\/?[A-Za-z]/.test(token)) return "text-[#569CD6]";
+  if (language.toLowerCase().includes("json") && /^[$A-Za-z_][\w$]*$/.test(token)) return "text-[#9CDCFE]";
+  if (/^[A-Z_]{3,}$/.test(token)) return "text-[#C586C0]";
+  if (/^[A-Za-z_$][\w$]*$/.test(token)) return "text-[#DCDCAA]";
+  return "text-[#D4D4D4]";
+}
+
+function isHtmlBlock(language: string, code: string) {
+  const normalized = language.toLowerCase();
+  return normalized === "html" || normalized === "htm" || /^\s*(<!doctype html>|<html|<section|<div|<main|<body)/i.test(code);
+}
+
+function exportConversationAsWord(messages: ChatMainProps["messages"], title: string) {
+  const html = buildConversationHtml(messages || [], title);
+  downloadBlob(`${safeFileName(title)}.doc`, new Blob([html], { type: "application/msword;charset=utf-8" }));
+}
+
+function exportConversationAsPdf(messages: ChatMainProps["messages"], title: string) {
+  const html = buildConversationHtml(messages || [], title);
+  const popup = window.open("", "_blank", "width=900,height=700");
+  if (!popup) return;
+  popup.document.write(html);
+  popup.document.close();
+  popup.focus();
+  window.setTimeout(() => popup.print(), 250);
+}
+
+function exportConversationAsCsv(messages: ChatMainProps["messages"], title: string) {
+  const tables = extractMarkdownTables(messages || []);
+  const rows = tables.length > 0
+    ? tables.flatMap((table, index) => [["Table", `${index + 1}`], table.headers, ...table.rows, []])
+    : [["Role", "Created at", "Content"], ...(messages || []).map((message) => [message.role, message.createdAt, message.content])];
+  downloadBlob(`${safeFileName(title)}.csv`, new Blob([`\ufeff${toCsv(rows)}`], { type: "text/csv;charset=utf-8" }));
+}
+
+function exportConversationAsExcel(messages: ChatMainProps["messages"], title: string) {
+  const tables = extractMarkdownTables(messages || []);
+  const body = tables.length > 0
+    ? tables.map((table, index) => `<h2>Table ${index + 1}</h2>${htmlTable(table.headers, table.rows)}`).join("")
+    : htmlTable(["Role", "Created at", "Content"], (messages || []).map((message) => [message.role, message.createdAt, message.content]));
+  const workbook = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>${body}</body></html>`;
+  downloadBlob(`${safeFileName(title)}.xls`, new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }));
+}
+
+function buildConversationHtml(messages: NonNullable<ChatMainProps["messages"]>, title: string) {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; padding: 32px; line-height: 1.55; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .meta { color: #6B7280; margin-bottom: 28px; }
+    .message { border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+    .role { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #4F46E5; text-transform: uppercase; }
+    pre { white-space: pre-wrap; background: #F3F4F6; padding: 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="meta">Exported from ZyNex on ${new Date().toLocaleString()}</div>
+  ${messages.map((message) => `<div class="message"><div class="role">${escapeHtml(message.role)}</div><pre>${escapeHtml(message.content)}</pre></div>`).join("")}
+</body>
+</html>`;
+}
+
+function extractMarkdownTables(messages: NonNullable<ChatMainProps["messages"]>) {
+  const tables: Array<{ headers: string[]; rows: string[][] }> = [];
+  for (const message of messages) {
+    const lines = message.content.split(/\r?\n/);
+    for (let index = 0; index < lines.length - 1; index += 1) {
+      if (isMarkdownTableRow(lines[index]) && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1])) {
+        const headers = splitMarkdownTableRow(lines[index]);
+        const rows: string[][] = [];
+        index += 2;
+        while (index < lines.length && isMarkdownTableRow(lines[index])) {
+          rows.push(splitMarkdownTableRow(lines[index]));
+          index += 1;
+        }
+        if (headers.length && rows.length) tables.push({ headers, rows });
+      }
+    }
+  }
+  return tables;
+}
+
+function countMarkdownTables(messages: ChatMainProps["messages"]) {
+  return extractMarkdownTables(messages || []).length;
+}
+
+function isMarkdownTableRow(line: string) {
+  return line.includes("|") && splitMarkdownTableRow(line).length > 1;
+}
+
+function splitMarkdownTableRow(line: string) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function htmlTable(headers: string[], rows: string[][]) {
+  return `<table border="1" cellspacing="0" cellpadding="8"><thead><tr>${headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+
+function toCsv(rows: string[][]) {
+  return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
+function downloadBlob(fileName: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function safeFileName(value: string) {
+  return (value || "zynex-conversation").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 72) || "zynex-conversation";
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[character] || character));
 }
