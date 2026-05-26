@@ -54,6 +54,16 @@ a {
   80% { transform: translateX(3px); }
 }
 
+@keyframes voiceTrack {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-56px); }
+}
+
+@keyframes voiceWave {
+  0%, 100% { transform: scaleY(0.48); opacity: 0.56; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
 .zynex-shell {
   position: relative;
   min-height: 100vh;

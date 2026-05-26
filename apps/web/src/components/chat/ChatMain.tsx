@@ -7,6 +7,46 @@ import { suggestions } from "@/components/chat/chatData";
 
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
 
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+type SpeechRecognitionResultListLike = {
+  length: number;
+  item(index: number): SpeechRecognitionResultLike;
+  [index: number]: SpeechRecognitionResultLike;
+};
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  length: number;
+  item(index: number): { transcript: string };
+  [index: number]: { transcript: string };
+};
+type SpeechRecognitionEventLike = Event & {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+};
+type SpeechRecognitionInstance = EventTarget & {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: Event & { error?: string }) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onspeechstart: (() => void) | null;
+  onspeechend: (() => void) | null;
+  onsoundstart: (() => void) | null;
+  onsoundend: (() => void) | null;
+};
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 type ChatMainProps = {
   onOpenSidebar: () => void;
   temporaryChat: boolean;
@@ -74,9 +114,19 @@ export function ChatMain({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number }>>([]);
   const [exportOpen, setExportOpen] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [voiceState, setVoiceState] = useState<"idle" | "listening" | "analyzing" | "unsupported">("idle");
+  const [voiceInterim, setVoiceInterim] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const recordingActiveRef = useRef(false);
+  const promptRef = useRef(prompt);
   const tableCount = countMarkdownTables(messages);
+
+  useEffect(() => {
+    promptRef.current = prompt;
+  }, [prompt]);
 
   useEffect(() => {
     function closeExportMenu(event: MouseEvent) {
@@ -89,10 +139,104 @@ export function ChatMain({
     return () => document.removeEventListener("mousedown", closeExportMenu);
   }, []);
 
+  useEffect(() => {
+    if (!recording) return;
+    const timer = window.setInterval(() => setVoiceSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+
+  useEffect(() => {
+    return () => {
+      recordingActiveRef.current = false;
+      recognitionRef.current?.abort();
+    };
+  }, []);
+
   async function copyText(id: string, value: string) {
     await navigator.clipboard.writeText(value);
     setCopiedId(id);
     window.setTimeout(() => setCopiedId(null), 1400);
+  }
+
+  function startVoiceInput() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceState("unsupported");
+      window.setTimeout(() => setVoiceState("idle"), 3200);
+      return;
+    }
+
+    recognitionRef.current?.abort();
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognitionRef.current = recognition;
+    recordingActiveRef.current = true;
+    setVoiceSeconds(0);
+    setVoiceInterim("");
+    setVoiceState("listening");
+    setRecording(true);
+
+    recognition.onstart = () => setVoiceState("listening");
+    recognition.onspeechstart = () => setVoiceState("analyzing");
+    recognition.onsoundstart = () => setVoiceState("analyzing");
+    recognition.onspeechend = () => setVoiceState("listening");
+    recognition.onsoundend = () => setVoiceState("listening");
+    recognition.onerror = () => {
+      setVoiceState("listening");
+    };
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result[0]?.transcript || "";
+        if (result.isFinal) finalText += transcript;
+        else interimText += transcript;
+      }
+      if (finalText.trim()) {
+        const currentPrompt = promptRef.current;
+        const nextPrompt = `${currentPrompt}${currentPrompt.trim() ? " " : ""}${finalText.trim()}`.trim();
+        promptRef.current = nextPrompt;
+        setPrompt(nextPrompt);
+      }
+      setVoiceInterim(interimText.trim());
+    };
+    recognition.onend = () => {
+      if (recordingActiveRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          setVoiceState("listening");
+        }
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      recordingActiveRef.current = false;
+      setRecording(false);
+      setVoiceState("unsupported");
+    }
+  }
+
+  function stopVoiceInput() {
+    recordingActiveRef.current = false;
+    setRecording(false);
+    setVoiceState("analyzing");
+    setVoiceInterim("");
+    recognitionRef.current?.stop();
+    window.setTimeout(() => setVoiceState("idle"), 700);
+  }
+
+  function toggleVoiceInput() {
+    if (recording) {
+      stopVoiceInput();
+      return;
+    }
+    startVoiceInput();
   }
 
   return (
@@ -283,7 +427,7 @@ export function ChatMain({
                           <MessageAction label="Download response" onClick={() => exportSingleMessageAsWord(message, conversation?.title || "zynex-response")}>
                             <Download size={14} />
                           </MessageAction>
-                          <MessageAction label="Share">
+                          <MessageAction label="Share" onClick={() => shareMessage(message.content, conversation?.title || "ZyNex response")}>
                             <Share2 size={14} />
                           </MessageAction>
                           <MessageAction
@@ -296,7 +440,7 @@ export function ChatMain({
                           >
                             <ThumbsUp size={14} />
                           </MessageAction>
-                          <MessageAction label="Bad response">
+                          <MessageAction label="Bad response" onClick={() => saveResponseFeedback("bad", message.content, conversation?.id || message.id)}>
                             <ThumbsDown size={14} />
                           </MessageAction>
                         </>
@@ -382,6 +526,9 @@ export function ChatMain({
                 ))}
               </div>
             )}
+            {(recording || voiceState === "unsupported" || voiceState === "analyzing") && (
+              <VoiceRecorderPanel state={voiceState} seconds={voiceSeconds} interim={voiceInterim} />
+            )}
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
@@ -407,19 +554,8 @@ export function ChatMain({
               </div>
 
               <div className="flex items-center gap-2">
-                {recording && (
-                  <div className="flex items-center gap-1 rounded-full bg-red-50 px-3 py-2">
-                    {[0, 1, 2, 3].map((bar) => (
-                      <span
-                        key={bar}
-                        className="h-4 w-1 animate-pulse rounded-full bg-red-500"
-                        style={{ animationDelay: `${bar * 120}ms` }}
-                      />
-                    ))}
-                  </div>
-                )}
-                <IconButton label="Voice input" active={recording} onClick={() => setRecording(!recording)}>
-                  {recording ? <X size={18} /> : <Mic size={18} />}
+                <IconButton label={recording ? "Stop voice input" : "Voice input"} active={recording} onClick={toggleVoiceInput}>
+                  {recording ? <StopVoiceIcon /> : <Mic size={18} />}
                 </IconButton>
                 <button
                   type="button"
@@ -487,6 +623,72 @@ function AttachAction({ label, subtext, onClick }: { label: string; subtext: str
       <span className="mt-0.5 block font-body text-xs font-medium text-[#6B7280]">{subtext}</span>
     </button>
   );
+}
+
+function VoiceRecorderPanel({ state, seconds, interim }: { state: "idle" | "listening" | "analyzing" | "unsupported"; seconds: number; interim: string }) {
+  const unsupported = state === "unsupported";
+  return (
+    <div className={`mx-2 mb-2 rounded-2xl border px-3 py-2.5 ${unsupported ? "border-amber-200 bg-amber-50" : "border-[#E8EEF7] bg-[#F8FAFC]"}`}>
+      <div className="flex items-center gap-3">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${state === "analyzing" ? "animate-pulse bg-[#4F46E5]" : unsupported ? "bg-amber-500" : "bg-emerald-500"}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-body text-xs font-bold uppercase text-[#64748B]">
+              {unsupported ? "Speech unavailable" : state === "analyzing" ? "Analyzing speech" : "Listening"}
+            </span>
+            <span className="font-mono text-xs font-bold text-[#475569]">{formatVoiceTime(seconds)}</span>
+          </div>
+          {unsupported ? (
+            <p className="mt-1 font-body text-xs font-semibold text-amber-700">Speech recognition is not available in this browser. Try Chrome desktop for voice input.</p>
+          ) : (
+            <div className="mt-2 h-8 overflow-hidden rounded-full border border-[#E8EEF7] bg-white px-3">
+              {state === "analyzing" ? <VoiceWaves /> : <VoiceDots />}
+            </div>
+          )}
+          {interim && <p className="mt-2 truncate font-body text-xs font-semibold text-[#4F46E5]">{interim}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VoiceDots() {
+  return (
+    <div className="flex h-full min-w-max animate-[voiceTrack_1.2s_linear_infinite] items-center gap-2">
+      {Array.from({ length: 42 }).map((_, index) => (
+        <span key={index} className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#CBD5E1]" />
+      ))}
+    </div>
+  );
+}
+
+function VoiceWaves() {
+  return (
+    <div className="flex h-full items-center justify-center gap-1.5">
+      {[10, 18, 26, 14, 30, 20, 12, 24, 16].map((height, index) => (
+        <span
+          key={`${height}-${index}`}
+          className="w-1 animate-[voiceWave_680ms_ease-in-out_infinite] rounded-full bg-[#4F46E5]"
+          style={{ height, animationDelay: `${index * 70}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StopVoiceIcon() {
+  return (
+    <span className="relative grid h-5 w-5 place-items-center rounded-full border-2 border-white/90">
+      <span className="absolute h-3 w-3 rounded-full bg-white/25" />
+      <span className="relative h-1.5 w-1.5 rounded-full bg-white" />
+    </span>
+  );
+}
+
+function formatVoiceTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const remainingSeconds = (seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainingSeconds}`;
 }
 
 function ExportAction({ icon, label, subtext, onClick }: { icon: React.ReactNode; label: string; subtext: string; onClick: () => void }) {
@@ -649,6 +851,27 @@ function exportConversationAsWord(messages: ChatMainProps["messages"], title: st
 
 function exportSingleMessageAsWord(message: NonNullable<ChatMainProps["messages"]>[number], title: string) {
   downloadBlob(`${safeFileName(title)}-response.doc`, new Blob([buildConversationHtml([message], `${title} response`)], { type: "application/msword;charset=utf-8" }));
+}
+
+async function shareMessage(content: string, title: string) {
+  if (navigator.share) {
+    await navigator.share({ title, text: content });
+    return;
+  }
+  await navigator.clipboard.writeText(content);
+}
+
+function saveResponseFeedback(type: "bad", content: string, conversationId: string) {
+  const feedback = readResponseFeedback().filter((item) => item.conversationId !== conversationId || item.content !== content);
+  window.localStorage.setItem("zynex-response-feedback", JSON.stringify([{ type, content, conversationId, createdAt: new Date().toISOString() }, ...feedback].slice(0, 100)));
+}
+
+function readResponseFeedback(): Array<{ type: "bad"; content: string; conversationId: string; createdAt: string }> {
+  try {
+    return JSON.parse(window.localStorage.getItem("zynex-response-feedback") || "[]");
+  } catch {
+    return [];
+  }
 }
 
 function exportConversationAsPdf(messages: ChatMainProps["messages"], title: string) {
