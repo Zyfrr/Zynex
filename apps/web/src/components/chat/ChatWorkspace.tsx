@@ -16,6 +16,34 @@ type WorkspaceUser = {
   profile?: { firstName?: string | null; lastName?: string | null; avatarUrl?: string | null } | null;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "USER" | "ASSISTANT" | "SYSTEM";
+  content: string;
+  createdAt: string;
+};
+
+type Conversation = {
+  id: string;
+  title?: string | null;
+  status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
+  provider: string;
+  model: string;
+  messages?: ChatMessage[];
+  logs?: Array<{ latencyMs: number; status: string; totalTokens: number }>;
+};
+
+type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
+
+const defaultProvider: ProviderName = "Groq";
+const defaultModels: Record<ProviderName, string> = {
+  OpenAI: "gpt-4.1-mini",
+  Groq: "llama-3.3-70b-versatile",
+  OpenRouter: "google/gemma-3-27b-it:free",
+  Claude: "ClaudeSonnet45",
+  Gemini: "gemini-1.5-flash"
+};
+
 export function ChatWorkspace() {
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
@@ -30,7 +58,14 @@ export function ChatWorkspace() {
   const [prompt, setPrompt] = useState("");
   const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [sending, setSending] = useState(false);
+  const [provider, setProvider] = useState<ProviderName>(defaultProvider);
+  const [model, setModel] = useState(defaultModels[defaultProvider]);
   const activeUser = user ?? session?.user ?? null;
+  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) || null;
 
   async function refreshProfile() {
     try {
@@ -53,6 +88,99 @@ export function ChatWorkspace() {
   useEffect(() => {
     void refreshProfile();
   }, [session?.user?.email]);
+
+  useEffect(() => {
+    if (activeUser) void refreshConversations();
+  }, [activeUser?.email]);
+
+  async function refreshConversations() {
+    try {
+      const items = await zynexApi<Conversation[]>("/api/v1/conversations/ZyNexAPI01ConversationsList");
+      setConversations(items);
+      const nextActive = items.find((conversation) => conversation.status === "ACTIVE") || items[0] || null;
+      if (!activeConversationId && nextActive) {
+        setActiveConversationId(nextActive.id);
+        setChatMessages(nextActive.messages || []);
+      }
+      if (activeConversationId) {
+        const current = items.find((conversation) => conversation.id === activeConversationId);
+        if (current) setChatMessages(current.messages || []);
+      }
+    } catch {
+      setConversations([]);
+    }
+  }
+
+  async function createConversation() {
+    if (!activeUser) {
+      openAuth("login");
+      return;
+    }
+    const conversation = await zynexApi<Conversation>("/api/v1/conversations/ZyNexAPI01ConversationsCreate", {
+      method: "POST",
+      body: JSON.stringify({ title: "New conversation", provider, model })
+    });
+    setConversations((items) => [conversation, ...items]);
+    setActiveConversationId(conversation.id);
+    setChatMessages([]);
+  }
+
+  async function selectConversation(conversation: Conversation) {
+    setActiveConversationId(conversation.id);
+    setChatMessages(conversation.messages || []);
+    setMobileSidebarOpen(false);
+  }
+
+  async function cancelConversation() {
+    if (!activeConversationId) return;
+    await zynexApi(`/api/v1/conversations/ZyNexAPI01Conversations/${activeConversationId}/Cancel`, { method: "PATCH" });
+    await refreshConversations();
+  }
+
+  async function sendPrompt() {
+    const nextPrompt = prompt.trim();
+    if (!nextPrompt || sending) return;
+    if (!activeUser) {
+      openAuth("login");
+      return;
+    }
+
+    setSending(true);
+    setPrompt("");
+    try {
+      let conversationId = activeConversationId;
+      if (!conversationId) {
+        const conversation = await zynexApi<Conversation>("/api/v1/conversations/ZyNexAPI01ConversationsCreate", {
+          method: "POST",
+          body: JSON.stringify({ title: nextPrompt.slice(0, 58), provider, model })
+        });
+        conversationId = conversation.id;
+        setActiveConversationId(conversation.id);
+        setConversations((items) => [conversation, ...items]);
+      }
+
+      const optimisticMessage: ChatMessage = {
+        id: `local-${Date.now()}`,
+        role: "USER",
+        content: nextPrompt,
+        createdAt: new Date().toISOString()
+      };
+      setChatMessages((items) => [...items, optimisticMessage]);
+
+      const result = await zynexApi<{
+        userMessage: ChatMessage;
+        assistantMessage: ChatMessage;
+      }>(`/api/v1/chat/ZyNexAPI01ChatConversations/${conversationId}/Messages`, {
+        method: "POST",
+        body: JSON.stringify({ message: nextPrompt, provider, model })
+      });
+
+      setChatMessages((items) => [...items.filter((message) => message.id !== optimisticMessage.id), result.userMessage, result.assistantMessage]);
+      await refreshConversations();
+    } finally {
+      setSending(false);
+    }
+  }
 
   function openAuth(nextMode: "login" | "signup") {
     setAuthMode(nextMode);
@@ -91,6 +219,10 @@ export function ChatWorkspace() {
           user={activeUser}
           authenticated={Boolean(activeUser)}
           onLoginClick={() => openAuth("login")}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onNewChat={createConversation}
+          onSelectConversation={selectConversation}
         />
         <ChatMain
           onOpenSidebar={() => {
@@ -109,6 +241,19 @@ export function ChatWorkspace() {
           authenticated={Boolean(activeUser)}
           onLoginClick={() => openAuth("login")}
           onSignupClick={() => openAuth("signup")}
+          conversation={activeConversation}
+          messages={chatMessages}
+          sending={sending}
+          onSend={sendPrompt}
+          onNewConversation={createConversation}
+          onCancelConversation={cancelConversation}
+          provider={provider}
+          model={model}
+          onProviderChange={(nextProvider) => {
+            setProvider(nextProvider);
+            setModel(defaultModels[nextProvider]);
+          }}
+          onModelChange={setModel}
         />
       </div>
       {authMode && (

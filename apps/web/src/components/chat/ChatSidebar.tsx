@@ -22,6 +22,24 @@ type ChatSidebarProps = {
   user?: { name?: string | null; email?: string | null; image?: string | null } | null;
   authenticated: boolean;
   onLoginClick: () => void;
+  conversations?: Array<{
+    id: string;
+    title?: string | null;
+    status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
+    provider: string;
+    model: string;
+    messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
+  }>;
+  activeConversationId?: string | null;
+  onNewChat?: () => void;
+  onSelectConversation?: (conversation: {
+    id: string;
+    title?: string | null;
+    status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
+    provider: string;
+    model: string;
+    messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
+  }) => void;
 };
 
 export function ChatSidebar({
@@ -39,9 +57,13 @@ export function ChatSidebar({
   setActiveMenu,
   user,
   authenticated,
-  onLoginClick
+  onLoginClick,
+  conversations = [],
+  activeConversationId,
+  onNewChat,
+  onSelectConversation
 }: ChatSidebarProps) {
-  const activeChats = groupedChats.filter((group) => group.items.length > 0);
+  const activeChats = conversations.length ? [] : groupedChats.filter((group) => group.items.length > 0);
   const displayName = user?.name || user?.email || "ZyNex Operator";
   const firstName = getFirstName(displayName);
   const initials = getInitials(displayName);
@@ -133,6 +155,7 @@ export function ChatSidebar({
       <div className="shrink-0 border-b border-[#E8EEF7] px-3 py-3">
         <button
           type="button"
+          onClick={onNewChat}
           className={`flex h-10 w-full items-center gap-2 rounded-xl bg-[#111827] px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#242A33] ${
             collapsed ? "justify-center px-0" : "justify-start"
           }`}
@@ -185,6 +208,29 @@ export function ChatSidebar({
           />
           {recentOpen && (
             <div className="mt-1 space-y-4">
+              {conversations.length > 0 && (
+                <div>
+                  {!collapsed && (
+                    <p className="px-3 pb-1 font-body text-[11px] font-semibold text-[#8A94A6]">
+                      Saved conversations
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {conversations.map((conversation) => (
+                      <ListRow
+                        key={conversation.id}
+                        collapsed={collapsed}
+                        title={`${conversation.title || "Untitled conversation"}${conversation.status === "CANCELLED" ? " (cancelled)" : ""}`}
+                        leadingIcon={<MessageSquare size={16} />}
+                        activeMenu={activeMenu}
+                        setActiveMenu={setActiveMenu}
+                        active={conversation.id === activeConversationId}
+                        onClick={() => onSelectConversation?.(conversation)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               {activeChats.map((group) => (
                 <div key={group.group}>
                   {!collapsed && (

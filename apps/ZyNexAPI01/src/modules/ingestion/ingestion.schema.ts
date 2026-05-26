@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export const inferenceLogSchema = z.object({
   requestId: z.string().min(1),
+  userId: z.string().min(1).optional(),
   conversationId: z.string().min(1),
+  messageId: z.string().min(1).optional(),
   provider: z.string().min(1),
   model: z.string().min(1),
   latencyMs: z.number().int().nonnegative(),

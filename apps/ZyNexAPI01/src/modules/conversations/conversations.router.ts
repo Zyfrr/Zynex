@@ -1,31 +1,46 @@
 import { Router } from "express";
+import { prisma } from "../../config/database";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { getUserIdFromRequest } from "../../utils/authRequest";
 
 export const conversationsRouter = Router();
 
 conversationsRouter.post(
   "/ZyNexAPI01ConversationsCreate",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
+    const provider = typeof req.body?.provider === "string" ? req.body.provider : "Claude";
+    const model = typeof req.body?.model === "string" ? req.body.model : "ClaudeSonnet45";
+    const title = typeof req.body?.title === "string" ? req.body.title : "New conversation";
+    const conversation = await prisma.conversation.create({
+      data: { userId, title, provider, model }
+    });
+
     res.status(201).json({
       success: true,
-      data: {
-        id: "ZyNexConversation1001",
-        title: "Enterprise discovery roleplay",
-        status: "ACTIVE"
-      }
+      data: conversation
     });
   })
 );
 
 conversationsRouter.get(
   "/ZyNexAPI01ConversationsList",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
+    const conversations = await prisma.conversation.findMany({
+      where: { userId },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        messages: { orderBy: { createdAt: "asc" }, take: 20 },
+        logs: { orderBy: { createdAt: "desc" }, take: 1 }
+      }
+    });
+
     res.json({
       success: true,
-      data: [
-        { id: "ZyNexConversation1001", title: "Enterprise discovery roleplay", status: "ACTIVE" },
-        { id: "ZyNexConversation1002", title: "Pricing objection coaching", status: "CANCELLED" }
-      ]
+      data: conversations
     });
   })
 );
@@ -33,9 +48,20 @@ conversationsRouter.get(
 conversationsRouter.patch(
   "/ZyNexAPI01Conversations/:ConversationId/Cancel",
   asyncHandler(async (req, res) => {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) return res.status(401).json({ success: false, error: { code: "AUTH001", message: "Please login again.", details: {} } });
+    const conversationId = String(req.params.ConversationId);
+    const conversation = await prisma.conversation.updateMany({
+      where: { id: conversationId, userId },
+      data: { status: "CANCELLED" }
+    });
+    if (!conversation.count) {
+      return res.status(404).json({ success: false, error: { code: "CHAT001", message: "Conversation not found.", details: {} } });
+    }
+
     res.json({
       success: true,
-      data: { id: req.params.ConversationId, status: "CANCELLED" }
+      data: { id: conversationId, status: "CANCELLED" }
     });
   })
 );

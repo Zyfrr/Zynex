@@ -1,4 +1,4 @@
-export type ZyNexProviderName = "Claude" | "OpenAI" | "Gemini";
+export type ZyNexProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
 
 export type ZyNexLLMRequest = {
   requestId: string;

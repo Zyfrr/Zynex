@@ -18,7 +18,12 @@ const envSchema = z.object({
   ZYNEX_EMAIL_FROM: z.string().default("ZyNex Support <support@zyfrr.com>"),
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
-  TWILIO_FROM_PHONE: z.string().optional()
+  TWILIO_FROM_PHONE: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+  ZYNEX_DEFAULT_PROVIDER: z.enum(["Claude", "OpenAI", "Gemini", "OpenRouter", "Groq"]).default("Groq"),
+  ZYNEX_DEFAULT_MODEL: z.string().default("llama-3.3-70b-versatile")
 });
 
 export const env = envSchema.parse(process.env);

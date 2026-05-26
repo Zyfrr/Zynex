@@ -58,7 +58,8 @@ export function ListRow({
   leadingIcon,
   activeMenu,
   setActiveMenu,
-  active = false
+  active = false,
+  onClick
 }: {
   collapsed: boolean;
   title: string;
@@ -66,10 +67,11 @@ export function ListRow({
   activeMenu: string | null;
   setActiveMenu: (value: string | null) => void;
   active?: boolean;
+  onClick?: () => void;
 }) {
   if (collapsed) {
     return (
-      <button className="grid h-10 w-full place-items-center rounded-xl text-[#6B7280] hover:bg-[#F3F5FA] hover:text-[#4F46E5]">
+      <button onClick={onClick} className="grid h-10 w-full place-items-center rounded-xl text-[#6B7280] hover:bg-[#F3F5FA] hover:text-[#4F46E5]">
         {leadingIcon}
       </button>
     );
@@ -77,14 +79,18 @@ export function ListRow({
 
   return (
     <div className="group relative flex h-10 items-center gap-2 rounded-xl px-3 text-[#4C596C] transition hover:bg-[#F3F5FA] hover:text-[#111827]">
+      <button type="button" aria-label={`Open ${title}`} onClick={onClick} className="absolute inset-0 rounded-xl" />
       <span className="shrink-0 text-[#6B7280]">{leadingIcon}</span>
       <span className="min-w-0 flex-1 truncate font-body text-[13px] font-medium">{title}</span>
       {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />}
       <button
         type="button"
         aria-label={`Actions for ${title}`}
-        onClick={() => setActiveMenu(activeMenu === title ? null : title)}
-        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A94A6] opacity-0 transition hover:bg-white hover:text-[#4F46E5] group-hover:opacity-100"
+        onClick={(event) => {
+          event.stopPropagation();
+          setActiveMenu(activeMenu === title ? null : title);
+        }}
+        className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A94A6] opacity-0 transition hover:bg-white hover:text-[#4F46E5] group-hover:opacity-100"
       >
         <MoreHorizontal size={16} />
       </button>

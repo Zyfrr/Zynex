@@ -19,17 +19,9 @@ import {
   phoneVerifySchema,
   registerSchema
 } from "./auth.schema";
-import { verifyAccessToken } from "./auth.tokens";
+import { getUserIdFromRequest } from "../../utils/authRequest";
 
 export const authRouter = Router();
-
-function getUserIdFromRequest(req: { cookies?: Record<string, string>; header: (name: string) => string | undefined }) {
-  const headerUserId = req.header("x-zynex-user-id");
-  if (headerUserId) return headerUserId;
-  const token = req.cookies?.ZyNexAccessToken;
-  if (!token) return undefined;
-  return verifyAccessToken(token).userId;
-}
 
 authRouter.post(
   "/ZyNexAPI01AuthLookup",

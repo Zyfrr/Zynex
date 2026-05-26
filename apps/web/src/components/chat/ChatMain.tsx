@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Mail, Menu, Mic, Paperclip, Search, Send, Sparkles, X } from "lucide-react";
+import { Mail, Menu, Mic, Paperclip, Search, Send, Sparkles, Square, X } from "lucide-react";
 import { suggestions } from "@/components/chat/chatData";
+
+type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
 
 type ChatMainProps = {
   onOpenSidebar: () => void;
@@ -16,6 +18,22 @@ type ChatMainProps = {
   authenticated: boolean;
   onLoginClick: () => void;
   onSignupClick: () => void;
+  conversation?: {
+    id: string;
+    title?: string | null;
+    status: "ACTIVE" | "CANCELLED" | "ARCHIVED";
+    provider: string;
+    model: string;
+  } | null;
+  messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
+  sending?: boolean;
+  onSend?: () => void;
+  onNewConversation?: () => void;
+  onCancelConversation?: () => void;
+  provider: ProviderName;
+  model: string;
+  onProviderChange: (provider: ProviderName) => void;
+  onModelChange: (model: string) => void;
 };
 
 export function ChatMain({
@@ -30,8 +48,21 @@ export function ChatMain({
   setPrompt,
   authenticated,
   onLoginClick,
-  onSignupClick
+  onSignupClick,
+  conversation,
+  messages = [],
+  sending = false,
+  onSend,
+  onNewConversation,
+  onCancelConversation,
+  provider,
+  model,
+  onProviderChange,
+  onModelChange
 }: ChatMainProps) {
+  const hasMessages = messages.length > 0;
+  const conversationCancelled = conversation?.status === "CANCELLED";
+
   return (
     <section className="flex min-w-0 flex-1 flex-col">
       <header className="flex min-h-[58px] shrink-0 items-center justify-between gap-3 border-b border-[#E8EEF7] bg-white/90 px-3 py-2 backdrop-blur-xl sm:px-5">
@@ -46,8 +77,35 @@ export function ChatMain({
           </button>
           <Sparkles size={17} className="text-[#4F46E5]" />
           <span className="truncate">ZyNex Chat</span>
+          {conversation && (
+            <span className="hidden rounded-full bg-[#F3F5FA] px-2.5 py-1 font-body text-xs text-[#6B7280] sm:inline">
+              {conversation.provider} / {conversation.model}
+            </span>
+          )}
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {authenticated && (
+            <div className="hidden items-center gap-2 rounded-full border border-[#E8EEF7] bg-white px-2 py-1 md:flex">
+              <select
+                value={provider}
+                onChange={(event) => onProviderChange(event.target.value as ProviderName)}
+                className="bg-transparent font-body text-xs font-semibold text-[#253248] outline-none"
+                aria-label="LLM provider"
+              >
+                <option value="Groq">Groq</option>
+                <option value="OpenRouter">OpenRouter</option>
+                <option value="OpenAI">OpenAI</option>
+                <option value="Claude">Claude</option>
+                <option value="Gemini">Gemini</option>
+              </select>
+              <input
+                value={model}
+                onChange={(event) => onModelChange(event.target.value)}
+                aria-label="LLM model"
+                className="h-7 w-32 rounded-full bg-[#F3F5FA] px-2 font-body text-xs font-semibold text-[#4C596C] outline-none"
+              />
+            </div>
+          )}
           {!authenticated && (
             <>
               <button
@@ -83,32 +141,81 @@ export function ChatMain({
               Temporary chat keeps the current conversation out of saved history and logging previews.
             </div>
           </div>
+          {authenticated && (
+            <button
+              type="button"
+              onClick={onNewConversation}
+              className="h-9 rounded-full border border-[#E8EEF7] bg-white px-3 font-body text-xs font-semibold text-[#4C596C] hover:border-[#4F46E5] hover:text-[#4F46E5] sm:text-sm"
+            >
+              New
+            </button>
+          )}
+          {authenticated && conversation && conversation.status === "ACTIVE" && (
+            <button
+              type="button"
+              onClick={onCancelConversation}
+              className="flex h-9 items-center gap-2 rounded-full border border-red-100 bg-red-50 px-3 font-body text-xs font-semibold text-red-600 hover:border-red-200 sm:text-sm"
+            >
+              <Square size={13} />
+              Cancel
+            </button>
+          )}
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
-          <div className="w-full max-w-3xl text-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-[#E8EEF7] bg-white shadow-sm sm:h-14 sm:w-14">
-              <img src="/assets/zynex-logos/zynex_favicon.svg" alt="" className="h-8 w-8 rounded-full sm:h-9 sm:w-9" />
-            </div>
-            <h1 className="mt-5 font-display text-[34px] font-semibold leading-[0.95] tracking-normal text-[#111827] sm:text-[44px] lg:text-[52px]">
-              How can ZyNex help today?
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl font-body text-sm leading-6 text-[#5D6A7C] sm:text-[15px] sm:leading-7">
-              Ask a question, practice a roleplay, compare providers, or inspect inference behavior.
-            </p>
-            <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              {suggestions.map((item) => (
-                <button
-                  key={item}
-                  className="rounded-2xl border border-[#E8EEF7] bg-white p-4 text-left font-body text-sm font-semibold text-[#253248] shadow-sm transition hover:border-[#4F46E5] hover:text-[#4F46E5]"
-                >
-                  {item}
-                </button>
+        <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 ${hasMessages ? "" : "flex items-center justify-center"}`}>
+          {hasMessages ? (
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+              {messages.map((message) => (
+                <div key={message.id} className={`flex ${message.role === "USER" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[82%] rounded-2xl px-4 py-3 font-body text-sm leading-6 shadow-sm ${
+                      message.role === "USER"
+                        ? "bg-[#111827] text-white"
+                        : "border border-[#E8EEF7] bg-white text-[#253248]"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  </div>
+                </div>
               ))}
+              {sending && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl border border-[#E8EEF7] bg-white px-4 py-3 text-[#4C596C] shadow-sm">
+                    <span className="inline-flex items-center gap-2 font-body text-sm font-semibold">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-[#CBD5E1] border-t-[#4F46E5]" />
+                      Logging inference...
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="w-full max-w-3xl text-center">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-[#E8EEF7] bg-white shadow-sm sm:h-14 sm:w-14">
+                <img src="/assets/zynex-logos/zynex_favicon.svg" alt="" className="h-8 w-8 rounded-full sm:h-9 sm:w-9" />
+              </div>
+              <h1 className="mt-5 font-display text-[34px] font-semibold leading-[0.95] tracking-normal text-[#111827] sm:text-[44px] lg:text-[52px]">
+                How can ZyNex help today?
+              </h1>
+              <p className="mx-auto mt-4 max-w-xl font-body text-sm leading-6 text-[#5D6A7C] sm:text-[15px] sm:leading-7">
+                Ask a question, practice a roleplay, compare providers, or inspect inference behavior.
+              </p>
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {suggestions.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setPrompt(item)}
+                    className="rounded-2xl border border-[#E8EEF7] bg-white p-4 text-left font-body text-sm font-semibold text-[#253248] shadow-sm transition hover:border-[#4F46E5] hover:text-[#4F46E5]"
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <footer className="shrink-0 bg-[#F7F8FB] px-3 pb-3 sm:px-5 sm:pb-4">
@@ -123,8 +230,15 @@ export function ChatMain({
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  onSend?.();
+                }
+              }}
               placeholder="Message ZyNex..."
               rows={2}
+              disabled={conversationCancelled || sending}
               className="min-h-[76px] w-full resize-none bg-transparent px-3 py-2 font-body text-sm leading-6 text-[#111827] outline-none placeholder:text-[#8A94A6] sm:min-h-[82px] sm:text-[15px]"
             />
             <div className="flex items-center justify-between gap-2 px-1 pt-2">
@@ -154,11 +268,12 @@ export function ChatMain({
                 </IconButton>
                 <button
                   type="button"
-                  disabled={!prompt.trim()}
+                  disabled={!prompt.trim() || conversationCancelled || sending}
                   aria-label="Send message"
+                  onClick={onSend}
                   className="grid h-10 w-10 place-items-center rounded-full bg-[#111827] text-white transition hover:bg-[#242A33] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Send size={18} />
+                  {sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/45 border-t-white" /> : <Send size={18} />}
                 </button>
               </div>
             </div>
