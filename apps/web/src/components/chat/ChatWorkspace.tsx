@@ -137,8 +137,33 @@ export function ChatWorkspace() {
     await refreshConversations();
   }
 
-  async function sendPrompt() {
-    const nextPrompt = prompt.trim();
+  async function renameConversation(conversationId: string, title: string) {
+    await zynexApi(`/api/v1/conversations/ZyNexAPI01Conversations/${conversationId}/Rename`, {
+      method: "PATCH",
+      body: JSON.stringify({ title })
+    });
+    await refreshConversations();
+  }
+
+  async function deleteConversation(conversationId: string) {
+    await zynexApi(`/api/v1/conversations/ZyNexAPI01Conversations/${conversationId}/Delete`, { method: "PATCH" });
+    if (activeConversationId === conversationId) {
+      setActiveConversationId(null);
+      setChatMessages([]);
+    }
+    await refreshConversations();
+  }
+
+  function pinConversation(conversationId: string) {
+    setConversations((items) => {
+      const pinned = items.find((conversation) => conversation.id === conversationId);
+      if (!pinned) return items;
+      return [pinned, ...items.filter((conversation) => conversation.id !== conversationId)];
+    });
+  }
+
+  async function sendPrompt(overridePrompt?: string) {
+    const nextPrompt = (overridePrompt ?? prompt).trim();
     if (!nextPrompt || sending) return;
     if (!activeUser) {
       openAuth("login");
@@ -146,7 +171,7 @@ export function ChatWorkspace() {
     }
 
     setSending(true);
-    setPrompt("");
+    if (!overridePrompt) setPrompt("");
     try {
       let conversationId = activeConversationId;
       if (!conversationId) {
@@ -223,6 +248,9 @@ export function ChatWorkspace() {
           activeConversationId={activeConversationId}
           onNewChat={createConversation}
           onSelectConversation={selectConversation}
+          onPinConversation={pinConversation}
+          onRenameConversation={renameConversation}
+          onDeleteConversation={deleteConversation}
         />
         <ChatMain
           onOpenSidebar={() => {
@@ -247,6 +275,11 @@ export function ChatWorkspace() {
           onSend={sendPrompt}
           onNewConversation={createConversation}
           onCancelConversation={cancelConversation}
+          onRegenerate={() => {
+            const lastUserMessage = [...chatMessages].reverse().find((message) => message.role === "USER");
+            if (lastUserMessage) void sendPrompt(lastUserMessage.content);
+          }}
+          onEditPrompt={(content) => setPrompt(content)}
           provider={provider}
           model={model}
           onProviderChange={(nextProvider) => {

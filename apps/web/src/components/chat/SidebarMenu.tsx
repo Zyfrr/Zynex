@@ -59,7 +59,10 @@ export function ListRow({
   activeMenu,
   setActiveMenu,
   active = false,
-  onClick
+  onClick,
+  onPin,
+  onRename,
+  onDelete
 }: {
   collapsed: boolean;
   title: string;
@@ -68,6 +71,9 @@ export function ListRow({
   setActiveMenu: (value: string | null) => void;
   active?: boolean;
   onClick?: () => void;
+  onPin?: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
 }) {
   if (collapsed) {
     return (
@@ -96,10 +102,10 @@ export function ListRow({
       </button>
       {activeMenu === title && (
         <div className="absolute right-2 top-9 z-30 w-44 rounded-xl border border-[#E8EEF7] bg-white p-1.5 shadow-2xl shadow-slate-900/12">
-          <MenuAction icon={<Pin size={14} />} label="Pin to top" />
-          <MenuAction icon={<FolderOpen size={14} />} label="Open" />
-          <MenuAction icon={<Archive size={14} />} label="Rename" />
-          <MenuAction icon={<Trash2 size={14} />} label="Delete" danger />
+          <MenuAction icon={<Pin size={14} />} label="Pin to top" onClick={onPin} />
+          <MenuAction icon={<FolderOpen size={14} />} label="Open" onClick={onClick} />
+          <MenuAction icon={<Archive size={14} />} label="Rename" onClick={onRename} />
+          <MenuAction icon={<Trash2 size={14} />} label="Delete" danger onClick={onDelete} />
         </div>
       )}
     </div>

@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { Mail, Menu, Mic, Paperclip, Search, Send, Sparkles, Square, X } from "lucide-react";
+import { Check, Clipboard, Mail, Menu, Mic, Paperclip, Pencil, RefreshCcw, Search, Send, Share2, Sparkles, Square, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { useRef, useState } from "react";
 import { suggestions } from "@/components/chat/chatData";
 
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
@@ -30,6 +33,8 @@ type ChatMainProps = {
   onSend?: () => void;
   onNewConversation?: () => void;
   onCancelConversation?: () => void;
+  onRegenerate?: () => void;
+  onEditPrompt?: (content: string) => void;
   provider: ProviderName;
   model: string;
   onProviderChange: (provider: ProviderName) => void;
@@ -55,6 +60,8 @@ export function ChatMain({
   onSend,
   onNewConversation,
   onCancelConversation,
+  onRegenerate,
+  onEditPrompt,
   provider,
   model,
   onProviderChange,
@@ -62,6 +69,15 @@ export function ChatMain({
 }: ChatMainProps) {
   const hasMessages = messages.length > 0;
   const conversationCancelled = conversation?.status === "CANCELLED";
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number }>>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function copyText(id: string, value: string) {
+    await navigator.clipboard.writeText(value);
+    setCopiedId(id);
+    window.setTimeout(() => setCopiedId(null), 1400);
+  }
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
@@ -89,7 +105,7 @@ export function ChatMain({
               <select
                 value={provider}
                 onChange={(event) => onProviderChange(event.target.value as ProviderName)}
-                className="bg-transparent font-body text-xs font-semibold text-[#253248] outline-none"
+                className="rounded-full bg-[#F8FAFC] px-2 py-1 font-body text-xs font-semibold text-[#253248] outline-none"
                 aria-label="LLM provider"
               >
                 <option value="Groq">Groq</option>
@@ -168,15 +184,46 @@ export function ChatMain({
           {hasMessages ? (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
               {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === "USER" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[82%] rounded-2xl px-4 py-3 font-body text-sm leading-6 shadow-sm ${
-                      message.role === "USER"
-                        ? "bg-[#111827] text-white"
-                        : "border border-[#E8EEF7] bg-white text-[#253248]"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                <div key={message.id} className={`flex flex-col ${message.role === "USER" ? "items-end" : "items-start"}`}>
+                  <div className={`max-w-[86%] ${message.role === "USER" ? "text-right" : "text-left"}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-3 font-body text-sm leading-6 shadow-sm ${
+                        message.role === "USER"
+                          ? "bg-[#111827] text-white"
+                          : "border border-[#E8EEF7] bg-white text-[#253248]"
+                      }`}
+                    >
+                      {message.role === "ASSISTANT" ? (
+                        <RichMessage content={message.content} onCopy={copyText} copiedId={copiedId} />
+                      ) : (
+                        <p className="whitespace-pre-wrap text-left">{message.content}</p>
+                      )}
+                    </div>
+                    <div className={`mt-2 flex items-center gap-1.5 ${message.role === "USER" ? "justify-end" : "justify-start"}`}>
+                      <MessageAction label="Copy" onClick={() => copyText(message.id, message.content)}>
+                        {copiedId === message.id ? <Check size={14} /> : <Clipboard size={14} />}
+                      </MessageAction>
+                      {message.role === "USER" ? (
+                        <MessageAction label="Edit prompt" onClick={() => onEditPrompt?.(message.content)}>
+                          <Pencil size={14} />
+                        </MessageAction>
+                      ) : (
+                        <>
+                          <MessageAction label="Regenerate" onClick={onRegenerate}>
+                            <RefreshCcw size={14} />
+                          </MessageAction>
+                          <MessageAction label="Share">
+                            <Share2 size={14} />
+                          </MessageAction>
+                          <MessageAction label="Good response">
+                            <ThumbsUp size={14} />
+                          </MessageAction>
+                          <MessageAction label="Bad response">
+                            <ThumbsDown size={14} />
+                          </MessageAction>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -222,9 +269,34 @@ export function ChatMain({
           <div className="relative mx-auto max-w-3xl rounded-[20px] border border-[#DDE5F0] bg-white p-2.5 shadow-[0_18px_60px_rgba(15,36,66,0.08)] sm:rounded-[24px] sm:p-3">
             {attachOpen && (
               <div className="absolute bottom-[96px] left-2 right-2 z-30 rounded-2xl border border-[#E8EEF7] bg-white p-2 shadow-2xl shadow-slate-900/12 sm:left-3 sm:right-auto sm:w-64">
-                <AttachAction label="Upload file" subtext="PDF, CSV, DOCX, TXT" />
+                <AttachAction label="Upload file" subtext="PDF, CSV, DOCX, TXT" onClick={() => fileInputRef.current?.click()} />
                 <AttachAction label="Connect source" subtext="Knowledge base or URL" />
                 <AttachAction label="Add screenshot" subtext="Image context for the prompt" />
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const files = Array.from(event.target.files || []).map((file) => ({ name: file.name, size: file.size }));
+                setAttachedFiles((items) => [...items, ...files]);
+                setAttachOpen(false);
+                event.currentTarget.value = "";
+              }}
+            />
+            {attachedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pb-2">
+                {attachedFiles.map((file) => (
+                  <span key={`${file.name}-${file.size}`} className="inline-flex items-center gap-2 rounded-full border border-[#E8EEF7] bg-[#F8FAFC] px-3 py-1.5 font-body text-xs font-semibold text-[#4C596C]">
+                    <Paperclip size={13} />
+                    {file.name}
+                    <button type="button" onClick={() => setAttachedFiles((items) => items.filter((item) => item !== file))} className="text-[#8A94A6] hover:text-red-600">
+                      <X size={13} />
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
             <textarea
@@ -325,11 +397,78 @@ function IconButton({
   );
 }
 
-function AttachAction({ label, subtext }: { label: string; subtext: string }) {
+function AttachAction({ label, subtext, onClick }: { label: string; subtext: string; onClick?: () => void }) {
   return (
-    <button className="block w-full rounded-xl px-3 py-2.5 text-left hover:bg-[#F3F5FA]">
+    <button type="button" onClick={onClick} className="block w-full rounded-xl px-3 py-2.5 text-left hover:bg-[#F3F5FA]">
       <span className="block font-body text-sm font-semibold text-[#111827]">{label}</span>
       <span className="mt-0.5 block font-body text-xs font-medium text-[#6B7280]">{subtext}</span>
     </button>
   );
+}
+
+function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
+  const parts = parseCodeBlocks(content);
+  return (
+    <div className="space-y-3 text-left">
+      {parts.map((part, index) => part.type === "code" ? (
+        <CodeBlock key={index} id={`code-${index}-${part.language}`} language={part.language} code={part.value} onCopy={onCopy} copiedId={copiedId} />
+      ) : (
+        <p key={index} className="whitespace-pre-wrap">{part.value}</p>
+      ))}
+    </div>
+  );
+}
+
+function CodeBlock({ id, language, code, onCopy, copiedId }: { id: string; language: string; code: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(code);
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#1F2937] bg-[#0F172A] text-left">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#111827] px-3 py-2">
+        <span className="font-body text-xs font-semibold text-slate-300">{language || "code"}</span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setEditing(!editing)} className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">
+            Edit
+          </button>
+          <button type="button" onClick={() => onCopy(id, draft)} className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">
+            {copiedId === id ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </div>
+      {editing ? (
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="min-h-48 w-full resize-y bg-[#020617] p-4 font-mono text-xs leading-6 text-slate-100 outline-none" />
+      ) : (
+        <pre className="overflow-x-auto p-4 text-xs leading-6 text-slate-100"><code>{draft}</code></pre>
+      )}
+    </div>
+  );
+}
+
+function MessageAction({ children, label, onClick }: { children: React.ReactNode; label: string; onClick?: () => void }) {
+  return (
+    <button type="button" aria-label={label} onClick={onClick} className="grid h-7 w-7 place-items-center rounded-full border border-[#E8EEF7] bg-white text-[#6B7280] transition hover:border-[#D7DFEB] hover:text-[#4F46E5]">
+      {children}
+    </button>
+  );
+}
+
+function parseCodeBlocks(content: string) {
+  const regex = /```(\w+)?\n([\s\S]*?)```/g;
+  const parts: Array<{ type: "text" | "code"; value: string; language: string }> = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(content))) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: content.slice(lastIndex, match.index).trim(), language: "" });
+    }
+    parts.push({ type: "code", language: match[1] || "text", value: match[2]?.trimEnd() || "" });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push({ type: "text", value: content.slice(lastIndex).trim(), language: "" });
+  }
+
+  return parts.filter((part) => part.value);
 }

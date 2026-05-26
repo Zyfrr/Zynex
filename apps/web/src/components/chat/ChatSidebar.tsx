@@ -1,8 +1,8 @@
 import { Clock3, Folder, LogOut, MessageSquare, Plus, Search, Settings, Sparkles, User, X } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { useEffect } from "react";
 import { toast } from "sonner";
-import { groupedChats, projects } from "@/components/chat/chatData";
-import { ListRow, MenuAction, projectIcon, SidebarSection } from "@/components/chat/SidebarMenu";
+import { ListRow, MenuAction, SidebarSection } from "@/components/chat/SidebarMenu";
 import { SidebarPanelIcon } from "@/components/chat/SidebarPanelIcon";
 import { zynexApi } from "@/lib/api";
 
@@ -40,6 +40,9 @@ type ChatSidebarProps = {
     model: string;
     messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
   }) => void;
+  onPinConversation?: (conversationId: string) => void;
+  onRenameConversation?: (conversationId: string, title: string) => void;
+  onDeleteConversation?: (conversationId: string) => void;
 };
 
 export function ChatSidebar({
@@ -61,12 +64,23 @@ export function ChatSidebar({
   conversations = [],
   activeConversationId,
   onNewChat,
-  onSelectConversation
+  onSelectConversation,
+  onPinConversation,
+  onRenameConversation,
+  onDeleteConversation
 }: ChatSidebarProps) {
-  const activeChats = conversations.length ? [] : groupedChats.filter((group) => group.items.length > 0);
   const displayName = user?.name || user?.email || "ZyNex Operator";
   const firstName = getFirstName(displayName);
   const initials = getInitials(displayName);
+
+  useEffect(() => {
+    if (!activeMenu) return;
+    function closeMenu() {
+      setActiveMenu(null);
+    }
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, [activeMenu, setActiveMenu]);
 
   async function logout() {
     try {
@@ -183,18 +197,9 @@ export function ChatSidebar({
           onToggle={() => setProjectsOpen(!projectsOpen)}
           actionIcon={<Plus size={15} />}
         />
-        {projectsOpen && (
+        {projectsOpen && authenticated && (
           <div className="mt-1 space-y-1">
-            {projects.map((project) => (
-              <ListRow
-                key={project.title}
-                collapsed={collapsed}
-                title={project.title}
-                leadingIcon={projectIcon(project.open)}
-                activeMenu={activeMenu}
-                setActiveMenu={setActiveMenu}
-              />
-            ))}
+            {!collapsed && <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">No projects yet. Create a new project from the project action.</p>}
           </div>
         )}
 
@@ -226,33 +231,23 @@ export function ChatSidebar({
                         setActiveMenu={setActiveMenu}
                         active={conversation.id === activeConversationId}
                         onClick={() => onSelectConversation?.(conversation)}
+                        onPin={() => onPinConversation?.(conversation.id)}
+                        onRename={() => {
+                          const title = window.prompt("Rename conversation", conversation.title || "Untitled conversation");
+                          if (title) onRenameConversation?.(conversation.id, title);
+                        }}
+                        onDelete={() => onDeleteConversation?.(conversation.id)}
                       />
                     ))}
                   </div>
                 </div>
               )}
-              {activeChats.map((group) => (
-                <div key={group.group}>
-                  {!collapsed && (
-                    <p className="px-3 pb-1 font-body text-[11px] font-semibold text-[#8A94A6]">
-                      {group.group}
-                    </p>
-                  )}
-                  <div className="space-y-1">
-                    {group.items.map((chat) => (
-                      <ListRow
-                        key={chat.title}
-                        collapsed={collapsed}
-                        title={chat.title}
-                        leadingIcon={<MessageSquare size={16} />}
-                        activeMenu={activeMenu}
-                        setActiveMenu={setActiveMenu}
-                        active
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {!authenticated && !collapsed && (
+                <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">Login to see your saved conversations.</p>
+              )}
+              {authenticated && conversations.length === 0 && !collapsed && (
+                <p className="px-3 py-2 font-body text-xs font-medium text-[#8A94A6]">No conversations yet. Start a new chat.</p>
+              )}
             </div>
           )}
         </div>
