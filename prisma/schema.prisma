@@ -77,6 +77,10 @@ model User {
   termsAcceptances TermsAcceptance[]
   conversations Conversation[]
   inferenceLogs InferenceLog[]
+  projects      Project[]
+  likedChats    LikedChat[]
+  providerKeys  UserProviderKey[]
+  responseFeedback ResponseFeedback[]
 
   @@index([statusCode])
 }
@@ -204,14 +208,33 @@ model Conversation {
   provider  String             @default("Claude")
   model     String             @default("ClaudeSonnet45")
   status    ConversationStatus @default(ACTIVE)
+  pinned    Boolean            @default(false)
+  projectId String?
+  deletedAt DateTime?
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   user      User               @relation(fields: [userId], references: [id])
+  project   Project?           @relation(fields: [projectId], references: [id])
   messages  Message[]
   logs      InferenceLog[]
+  likedBy   LikedChat[]
+  feedback  ResponseFeedback[]
 
   @@index([userId, status])
+  @@index([projectId])
   @@index([createdAt])
+}
+
+model Project {
+  id            String         @id @default(cuid())
+  userId        String
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id])
+  conversations Conversation[]
+
+  @@index([userId, updatedAt])
 }
 
 model Message {
@@ -293,4 +316,43 @@ model ErrorEvent {
   provider       String?
   createdAt      DateTime     @default(now())
   inferenceLog   InferenceLog @relation(fields: [inferenceLogId], references: [id])
+}
+
+model LikedChat {
+  id             String       @id @default(cuid())
+  userId         String
+  conversationId String
+  title          String
+  preview        String
+  likedAt        DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([userId, conversationId])
+  @@index([userId, likedAt])
+}
+
+model UserProviderKey {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  apiKey    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, provider])
+}
+
+model ResponseFeedback {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String
+  type           String
+  content        String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([userId, createdAt])
 }

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 import { AuthFlow } from "@/components/auth/AuthFlow";
 import { ChatMain } from "@/components/chat/ChatMain";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { zynexApi } from "@/lib/api";
+import { ZyNexApiError, getZyNexApiBaseUrl, zynexApi } from "@/lib/api";
 
 type WorkspaceUser = {
   id?: string;
@@ -99,13 +100,22 @@ export function ChatWorkspace() {
   }, [activeUser?.email]);
 
   useEffect(() => {
-    setProjects(readWorkspaceProjects());
+    if (activeUser) void refreshProjects();
+  }, [activeUser?.email]);
+
+  useEffect(() => {
+    function updateStreamingMessage(event: Event) {
+      const detail = (event as CustomEvent<{ optimisticId: string; content: string }>).detail;
+      setChatMessages((items) => items.map((message) => message.id === `${detail.optimisticId}-assistant` ? { ...message, content: detail.content } : message));
+    }
+    window.addEventListener("zynex-stream-token", updateStreamingMessage);
+    return () => window.removeEventListener("zynex-stream-token", updateStreamingMessage);
   }, []);
 
   async function refreshConversations() {
     try {
       const items = await zynexApi<Conversation[]>("/api/v1/conversations/ZyNexAPI01ConversationsList");
-      setConversations(mergeLocalConversationState(items));
+      setConversations(sortConversations(items));
       const nextActive = items.find((conversation) => conversation.status === "ACTIVE") || items[0] || null;
       if (!activeConversationId && nextActive) {
         setActiveConversationId(nextActive.id);
@@ -120,6 +130,14 @@ export function ChatWorkspace() {
     }
   }
 
+  async function refreshProjects() {
+    try {
+      setProjects(await zynexApi<Project[]>("/api/v1/conversations/ZyNexAPI01Projects"));
+    } catch {
+      setProjects([]);
+    }
+  }
+
   async function createConversation() {
     if (!activeUser) {
       openAuth("login");
@@ -127,20 +145,20 @@ export function ChatWorkspace() {
     }
     const conversation = await zynexApi<Conversation>("/api/v1/conversations/ZyNexAPI01ConversationsCreate", {
       method: "POST",
-      body: JSON.stringify({ title: "New conversation", provider, model })
+      body: JSON.stringify({ title: "New conversation", provider, model, projectId: activeProjectId })
     });
-    const nextConversation = attachConversationToActiveProject(conversation);
-    setConversations((items) => sortConversations([nextConversation, ...items]));
-    setActiveConversationId(nextConversation.id);
+    setConversations((items) => sortConversations([conversation, ...items]));
+    setActiveConversationId(conversation.id);
     setChatMessages([]);
   }
 
-  function createProject(name: string) {
-    const project = { id: `project-${Date.now()}`, name };
-    const nextProjects = [project, ...projects];
-    setProjects(nextProjects);
+  async function createProject(name: string) {
+    const project = await zynexApi<Project>("/api/v1/conversations/ZyNexAPI01Projects", {
+      method: "POST",
+      body: JSON.stringify({ name })
+    });
+    setProjects((items) => [project, ...items]);
     setActiveProjectId(project.id);
-    writeWorkspaceProjects(nextProjects);
   }
 
   function selectProject(projectId: string | null) {
@@ -176,27 +194,23 @@ export function ChatWorkspace() {
     await refreshConversations();
   }
 
-  function pinConversation(conversationId: string) {
-    setConversations((items) => {
-      const next = items.map((conversation) => conversation.id === conversationId ? { ...conversation, pinned: !conversation.pinned } : conversation);
-      writePinnedConversationIds(next.filter((conversation) => conversation.pinned).map((conversation) => conversation.id));
-      return sortConversations(next);
+  async function pinConversation(conversationId: string) {
+    const updated = await zynexApi<Conversation>(`/api/v1/conversations/ZyNexAPI01Conversations/${conversationId}/Pin`, { method: "PATCH" });
+    setConversations((items) => sortConversations(items.map((conversation) => conversation.id === conversationId ? { ...conversation, pinned: updated.pinned } : conversation)));
+  }
+
+  async function likeConversation(item: { id: string; title: string; preview: string }) {
+    await zynexApi("/api/v1/conversations/ZyNexAPI01LikedChats", {
+      method: "POST",
+      body: JSON.stringify({ conversationId: item.id, title: item.title, preview: item.preview })
     });
   }
 
-  function likeConversation(item: { id: string; title: string; preview: string }) {
-    const liked = readLikedChats().filter((chat) => chat.id !== item.id);
-    const nextLiked = [{ ...item, likedAt: new Date().toISOString() }, ...liked].slice(0, 50);
-    window.localStorage.setItem("zynex-liked-chats", JSON.stringify(nextLiked));
-    window.dispatchEvent(new Event("zynex-liked-chats-updated"));
-  }
-
-  function attachConversationToActiveProject(conversation: Conversation) {
-    if (!activeProjectId) return conversation;
-    const map = readProjectConversationMap();
-    map[conversation.id] = activeProjectId;
-    window.localStorage.setItem("zynex-project-conversations", JSON.stringify(map));
-    return { ...conversation, projectId: activeProjectId };
+  async function badResponseFeedback(item: { id: string; content: string }) {
+    await zynexApi("/api/v1/conversations/ZyNexAPI01ResponseFeedback", {
+      method: "POST",
+      body: JSON.stringify({ conversationId: item.id, content: item.content, type: "bad" })
+    });
   }
 
   async function sendPrompt(overridePrompt?: string) {
@@ -214,12 +228,11 @@ export function ChatWorkspace() {
       if (!conversationId) {
         const conversation = await zynexApi<Conversation>("/api/v1/conversations/ZyNexAPI01ConversationsCreate", {
           method: "POST",
-          body: JSON.stringify({ title: nextPrompt.slice(0, 58), provider, model })
+          body: JSON.stringify({ title: nextPrompt.slice(0, 58), provider, model, projectId: activeProjectId })
         });
         conversationId = conversation.id;
         setActiveConversationId(conversation.id);
-        const nextConversation = attachConversationToActiveProject(conversation);
-        setConversations((items) => sortConversations([nextConversation, ...items]));
+        setConversations((items) => sortConversations([conversation, ...items]));
       }
 
       const optimisticMessage: ChatMessage = {
@@ -229,17 +242,31 @@ export function ChatWorkspace() {
         createdAt: new Date().toISOString()
       };
       setChatMessages((items) => [...items, optimisticMessage]);
+      const optimisticAssistant: ChatMessage = {
+        id: `${optimisticMessage.id}-assistant`,
+        role: "ASSISTANT",
+        content: "",
+        createdAt: new Date().toISOString()
+      };
+      setChatMessages((items) => [...items, optimisticAssistant]);
 
-      const result = await zynexApi<{
-        userMessage: ChatMessage;
-        assistantMessage: ChatMessage;
-      }>(`/api/v1/chat/ZyNexAPI01ChatConversations/${conversationId}/Messages`, {
-        method: "POST",
-        body: JSON.stringify({ message: nextPrompt, provider, model })
-      });
-
-      setChatMessages((items) => [...items.filter((message) => message.id !== optimisticMessage.id), result.userMessage, result.assistantMessage]);
+      const result = await streamChatMessage(conversationId, nextPrompt, provider, model, optimisticMessage);
+      setChatMessages((items) => [...items.filter((message) => !message.id.startsWith("local-")), result.userMessage, result.assistantMessage]);
       await refreshConversations();
+    } catch (error) {
+      if (isProviderKeyError(error)) {
+        toast.error("Your API key is expired or exhausted.", {
+          description: "Regenerate the provider key, update it in Dashboard > API Keys, and continue working.",
+          action: {
+            label: "Update key",
+            onClick: () => {
+              window.location.href = "/dashboard?zx=api-keys";
+            }
+          }
+        });
+      } else {
+        toast.error("Code: CHAT001", { description: `Message: ${error instanceof Error ? error.message : "Unable to send message."}` });
+      }
     } finally {
       setSending(false);
     }
@@ -323,6 +350,7 @@ export function ChatWorkspace() {
           }}
           onEditPrompt={(content) => setPrompt(content)}
           onLikeConversation={likeConversation}
+          onBadResponse={badResponseFeedback}
           provider={provider}
           model={model}
           onProviderChange={(nextProvider) => {
@@ -359,56 +387,59 @@ export function ChatWorkspace() {
   );
 }
 
-function mergeLocalConversationState(items: Conversation[]) {
-  const pinnedIds = new Set(readPinnedConversationIds());
-  const projectMap = readProjectConversationMap();
-  return sortConversations(items.map((conversation) => ({
-    ...conversation,
-    pinned: pinnedIds.has(conversation.id),
-    projectId: projectMap[conversation.id] || null
-  })));
-}
-
 function sortConversations(items: Conversation[]) {
   return [...items].sort((first, second) => Number(Boolean(second.pinned)) - Number(Boolean(first.pinned)));
 }
 
-function readWorkspaceProjects(): Project[] {
-  try {
-    return JSON.parse(window.localStorage.getItem("zynex-projects") || "[]");
-  } catch {
-    return [];
+async function streamChatMessage(conversationId: string, message: string, provider: ProviderName, model: string, optimisticMessage: ChatMessage) {
+  const response = await fetch(`${getZyNexApiBaseUrl()}/api/v1/chat/ZyNexAPI01ChatConversations/${conversationId}/MessagesStream`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, provider, model, stream: true })
+  });
+
+  if (!response.ok || !response.body) {
+    const payload = await response.json().catch(() => null);
+    throw new ZyNexApiError(payload?.error?.message || "Unable to stream response.", payload?.error?.code || "LLM001", payload?.error?.details || {});
   }
-}
 
-function writeWorkspaceProjects(projects: Project[]) {
-  window.localStorage.setItem("zynex-projects", JSON.stringify(projects));
-}
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let assistantDraft = "";
+  let finalResult: { userMessage: ChatMessage; assistantMessage: ChatMessage } | null = null;
 
-function readPinnedConversationIds(): string[] {
-  try {
-    return JSON.parse(window.localStorage.getItem("zynex-pinned-conversations") || "[]");
-  } catch {
-    return [];
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const eventBlock of events) {
+      const event = parseSseEvent(eventBlock);
+      if (event.event === "token") {
+        assistantDraft += event.data.token || "";
+        window.dispatchEvent(new CustomEvent("zynex-stream-token", { detail: { optimisticId: optimisticMessage.id, content: assistantDraft } }));
+      }
+      if (event.event === "done") finalResult = event.data;
+      if (event.event === "error") throw new ZyNexApiError(event.data.message || "Streaming failed.", event.data.code || "LLM001", {});
+    }
   }
+
+  if (!finalResult) throw new ZyNexApiError("Streaming response did not complete.", "LLM001", {});
+  return finalResult;
 }
 
-function writePinnedConversationIds(ids: string[]) {
-  window.localStorage.setItem("zynex-pinned-conversations", JSON.stringify(ids));
+function parseSseEvent(block: string) {
+  const event = block.split("\n").find((line) => line.startsWith("event:"))?.replace("event:", "").trim() || "message";
+  const dataLine = block.split("\n").find((line) => line.startsWith("data:"))?.replace("data:", "").trim() || "{}";
+  return { event, data: JSON.parse(dataLine) };
 }
 
-function readProjectConversationMap(): Record<string, string> {
-  try {
-    return JSON.parse(window.localStorage.getItem("zynex-project-conversations") || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function readLikedChats(): Array<{ id: string; title: string; preview: string; likedAt: string }> {
-  try {
-    return JSON.parse(window.localStorage.getItem("zynex-liked-chats") || "[]");
-  } catch {
-    return [];
-  }
+function isProviderKeyError(error: unknown) {
+  if (!(error instanceof ZyNexApiError)) return false;
+  const message = error.message.toLowerCase();
+  return error.code.startsWith("LLM") || message.includes("api key") || message.includes("quota") || message.includes("credit") || message.includes("rate limit") || message.includes("insufficient");
 }

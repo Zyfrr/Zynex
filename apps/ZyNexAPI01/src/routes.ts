@@ -4,6 +4,7 @@ import { authRouter } from "./modules/auth/auth.router";
 import { chatRouter } from "./modules/chat/chat.router";
 import { conversationsRouter } from "./modules/conversations/conversations.router";
 import { ingestionRouter } from "./modules/ingestion/ingestion.router";
+import { providerKeysRouter } from "./modules/providerKeys/providerKeys.router";
 
 export const routes = Router();
 
@@ -23,3 +24,4 @@ routes.use("/api/v1/chat", chatRouter);
 routes.use("/api/v1/conversations", conversationsRouter);
 routes.use("/api/v1/ingestion", ingestionRouter);
 routes.use("/api/v1/analytics", analyticsRouter);
+routes.use("/api/v1/provider-keys", providerKeysRouter);

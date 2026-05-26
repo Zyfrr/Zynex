@@ -73,13 +73,11 @@ type DashboardPage =
   | "conversations"
   | "inference"
   | "providers"
-  | "recharge"
-  | "billing"
+  | "deletedChats"
+  | "likedChats"
+  | "apiKeys"
   | "security"
   | "sessions"
-  | "alerts"
-  | "audit"
-  | "datasets"
   | "settings";
 
 type ApiUser = {
@@ -114,19 +112,20 @@ type AnalyticsOverview = {
   recentConversations: Array<{ id: string; title: string; status: string; provider: string; model: string; updatedAt: string; lastMessage: string; lastLatencyMs: number; lastTokens: number }>;
 };
 
+type LikedChatRecord = { id: string; conversationId: string; title: string; preview: string; likedAt: string };
+type ProviderKeyRecord = { provider: string; maskedKey: string; updatedAt: string };
+
 const navItems: Array<{ id: DashboardPage; label: string; icon: React.ReactNode }> = [
   { id: "overview", label: "Overview", icon: <Gauge size={18} /> },
   { id: "profile", label: "My Profile", icon: <UserRound size={18} /> },
   { id: "conversations", label: "Conversations", icon: <MessageSquare size={18} /> },
   { id: "inference", label: "Inference Logs", icon: <ClipboardList size={18} /> },
   { id: "providers", label: "Providers", icon: <Bot size={18} /> },
-  { id: "recharge", label: "Recharge", icon: <CircleDollarSign size={18} /> },
-  { id: "billing", label: "Billing", icon: <CreditCard size={18} /> },
+  { id: "deletedChats", label: "Deleted Chats", icon: <X size={18} /> },
+  { id: "likedChats", label: "Liked Chats", icon: <Sparkles size={18} /> },
+  { id: "apiKeys", label: "API Keys", icon: <KeyRound size={18} /> },
   { id: "security", label: "Security", icon: <ShieldCheck size={18} /> },
   { id: "sessions", label: "Sessions", icon: <Workflow size={18} /> },
-  { id: "alerts", label: "Alerts", icon: <Bell size={18} /> },
-  { id: "audit", label: "Audit Trail", icon: <Activity size={18} /> },
-  { id: "datasets", label: "Datasets", icon: <Database size={18} /> },
   { id: "settings", label: "Settings", icon: <Layers3 size={18} /> }
 ];
 
@@ -136,13 +135,11 @@ const dashboardCodes: Record<DashboardPage, string> = {
   conversations: "conversations",
   inference: "inference-logs",
   providers: "providers",
-  recharge: "recharge",
-  billing: "billing",
+  deletedChats: "deleted-chats",
+  likedChats: "liked-chats",
+  apiKeys: "api-keys",
   security: "security",
   sessions: "sessions",
-  alerts: "alerts",
-  audit: "audit-trail",
-  datasets: "datasets",
   settings: "settings"
 };
 
@@ -322,13 +319,11 @@ export function DashboardShell() {
             {activePage === "conversations" && <ConversationsDashboardPage analytics={analytics} loading={analyticsLoading} />}
             {activePage === "inference" && <InferenceDashboardPage analytics={analytics} loading={analyticsLoading} />}
             {activePage === "providers" && <ProvidersDashboardPage analytics={analytics} loading={analyticsLoading} />}
-            {activePage === "recharge" && <RechargePage />}
-            {activePage === "billing" && <StaticPage kind="billing" />}
+            {activePage === "deletedChats" && <DeletedChatsPage />}
+            {activePage === "likedChats" && <LikedChatsPage />}
+            {activePage === "apiKeys" && <ApiKeysPage />}
             {activePage === "security" && <StaticPage kind="security" />}
             {activePage === "sessions" && <StaticPage kind="sessions" />}
-            {activePage === "alerts" && <StaticPage kind="alerts" />}
-            {activePage === "audit" && <StaticPage kind="audit" />}
-            {activePage === "datasets" && <StaticPage kind="datasets" />}
             {activePage === "settings" && <StaticPage kind="settings" />}
           </div>
         </main>
@@ -744,7 +739,7 @@ function RechargePage() {
   );
 }
 
-function StaticPage({ kind }: { kind: Exclude<DashboardPage, "overview" | "profile" | "recharge"> }) {
+function StaticPage({ kind }: { kind: Exclude<DashboardPage, "overview" | "profile" | "deletedChats" | "likedChats" | "apiKeys"> }) {
   const config = staticPageConfig[kind];
   return (
     <div className="space-y-5">
@@ -783,7 +778,7 @@ function StaticPage({ kind }: { kind: Exclude<DashboardPage, "overview" | "profi
 
 function ConversationsDashboardPage({ analytics, loading }: { analytics: AnalyticsOverview | null; loading: boolean }) {
   const config = staticPageConfig.conversations;
-  const [likedChats, setLikedChats] = useState<Array<{ id: string; title: string; preview: string; likedAt: string }>>([]);
+  const [likedChats, setLikedChats] = useState<LikedChatRecord[]>([]);
   const conversationRows = analytics?.recentConversations?.length
     ? analytics.recentConversations.map((conversation) => [
         conversation.title,
@@ -796,20 +791,10 @@ function ConversationsDashboardPage({ analytics, loading }: { analytics: Analyti
 
   useEffect(() => {
     function loadLikedChats() {
-      try {
-        setLikedChats(JSON.parse(window.localStorage.getItem("zynex-liked-chats") || "[]"));
-      } catch {
-        setLikedChats([]);
-      }
+      zynexApi<LikedChatRecord[]>("/api/v1/conversations/ZyNexAPI01LikedChats").then(setLikedChats).catch(() => setLikedChats([]));
     }
 
     loadLikedChats();
-    window.addEventListener("zynex-liked-chats-updated", loadLikedChats);
-    window.addEventListener("storage", loadLikedChats);
-    return () => {
-      window.removeEventListener("zynex-liked-chats-updated", loadLikedChats);
-      window.removeEventListener("storage", loadLikedChats);
-    };
   }, []);
 
   return (
@@ -967,7 +952,165 @@ function ProvidersDashboardPage({ analytics, loading }: { analytics: AnalyticsOv
   );
 }
 
-const staticPageConfig: Record<Exclude<DashboardPage, "overview" | "profile" | "recharge">, {
+function DeletedChatsPage() {
+  const [deletedChats, setDeletedChats] = useState<Array<{ id: string; title: string; provider: string; model: string; deletedAt: string; expiresAt: string; daysRemaining: number; lastMessage: string; lastLatencyMs: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadDeletedChats() {
+      try {
+        setLoading(true);
+        setDeletedChats(await zynexApi("/api/v1/conversations/ZyNexAPI01ConversationsDeleted"));
+      } catch (error) {
+        showDashboardError(error);
+        setDeletedChats([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadDeletedChats();
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard icon={<X />} label="Deleted chats" value={loading ? "..." : formatNumber(deletedChats.length)} delta="30 days" />
+        <MetricCard icon={<Clock3 />} label="Retention" value="30 days" delta="Auto purge" />
+        <MetricCard icon={<ShieldCheck />} label="Storage state" value="Archived" delta="Hidden" />
+      </div>
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-body text-xs font-bold uppercase text-[#4F46E5]">Deleted chats</p>
+            <h3 className="font-display text-2xl font-semibold">Recoverability window</h3>
+          </div>
+          <span className="rounded-full bg-red-50 px-3 py-1 font-body text-xs font-bold text-red-600">Permanent delete after 30 days</span>
+        </div>
+        <div className="mt-4 grid gap-3">
+          {deletedChats.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#DDE5F0] bg-[#F8FAFC] p-4 font-body text-sm font-semibold text-[#64748B]">
+              No deleted chats are currently inside the 30-day retention window.
+            </p>
+          ) : (
+            deletedChats.map((chat) => (
+              <article key={chat.id} className="rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h4 className="font-body text-sm font-bold text-[#111827]">{chat.title}</h4>
+                    <p className="mt-1 font-body text-xs font-semibold text-[#64748B]">{chat.provider} / {chat.model}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 font-body text-xs font-bold text-[#4F46E5]">{chat.daysRemaining} days left</span>
+                </div>
+                <p className="mt-3 line-clamp-2 font-body text-sm leading-6 text-[#475569]">{chat.lastMessage || "No message preview available."}</p>
+                <p className="mt-2 font-body text-xs font-semibold text-[#64748B]">Deleted {formatDate(chat.deletedAt)} · Purges {formatDate(chat.expiresAt)}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function LikedChatsPage() {
+  const [likedChats, setLikedChats] = useState<LikedChatRecord[]>([]);
+
+  useEffect(() => {
+    function loadLikedChats() {
+      zynexApi<LikedChatRecord[]>("/api/v1/conversations/ZyNexAPI01LikedChats").then(setLikedChats).catch(() => setLikedChats([]));
+    }
+
+    loadLikedChats();
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard icon={<Sparkles />} label="Liked chats" value={formatNumber(likedChats.length)} delta="Local" />
+        <MetricCard icon={<MessageSquare />} label="Review queue" value={formatNumber(likedChats.length)} delta="Useful" />
+        <MetricCard icon={<CheckCircle2 />} label="Signal quality" value={likedChats.length ? "Active" : "Empty"} delta="Feedback" />
+      </div>
+      <Panel>
+        <h3 className="font-display text-2xl font-semibold">Liked chat responses</h3>
+        <div className="mt-4 grid gap-3">
+          {likedChats.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#DDE5F0] bg-[#F8FAFC] p-4 font-body text-sm font-semibold text-[#64748B]">
+              Like responses in the workspace and they will appear here.
+            </p>
+          ) : likedChats.map((chat) => (
+            <article key={chat.id} className="rounded-xl border border-[#E8EEF7] bg-[#F8FAFC] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h4 className="font-body text-sm font-bold text-[#111827]">{chat.title}</h4>
+                <span className="font-body text-xs font-semibold text-[#64748B]">{formatDate(chat.likedAt)}</span>
+              </div>
+              <p className="mt-2 line-clamp-3 font-body text-sm leading-6 text-[#475569]">{chat.preview}</p>
+            </article>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ApiKeysPage() {
+  const [keys, setKeys] = useState<ProviderKeyRecord[]>([]);
+
+  useEffect(() => {
+    zynexApi<ProviderKeyRecord[]>("/api/v1/provider-keys/ZyNexAPI01ProviderKeys").then(setKeys).catch(() => setKeys([]));
+  }, []);
+
+  async function saveKey(provider: string, value: string) {
+    if (!value) return;
+    const key = await zynexApi<ProviderKeyRecord>(`/api/v1/provider-keys/ZyNexAPI01ProviderKeys/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey: value })
+    });
+    setKeys((items) => [key, ...items.filter((item) => item.provider !== provider)]);
+    toast.success("API key updated", { description: `${provider} requests will use this key from the workspace.` });
+  }
+
+  return (
+    <div className="space-y-5">
+      <Panel>
+        <p className="font-body text-xs font-bold uppercase text-[#4F46E5]">Provider access</p>
+        <h2 className="mt-1 font-display text-3xl font-semibold">API Keys</h2>
+        <p className="mt-3 max-w-3xl font-body text-sm leading-6 text-[#475569]">
+          If a provider key runs out of credits, expires, or becomes rate-limited, the workspace can stop responding. Regenerate the key in the provider dashboard, paste it here, and new chat requests will immediately use the updated key.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="rounded-full border border-[#E8EEF7] px-3 py-2 font-body text-xs font-bold text-[#4F46E5] hover:bg-[#EEF2FF]">Regenerate Groq key</a>
+          <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" className="rounded-full border border-[#E8EEF7] px-3 py-2 font-body text-xs font-bold text-[#4F46E5] hover:bg-[#EEF2FF]">Regenerate OpenRouter key</a>
+          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="rounded-full border border-[#E8EEF7] px-3 py-2 font-body text-xs font-bold text-[#4F46E5] hover:bg-[#EEF2FF]">Regenerate OpenAI key</a>
+        </div>
+      </Panel>
+      <div className="grid gap-4 xl:grid-cols-3">
+        {["Groq", "OpenRouter", "OpenAI"].map((provider) => (
+          <Panel key={provider}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-2xl font-semibold">{provider}</h3>
+                <p className="mt-1 font-body text-xs font-semibold text-[#64748B]">{keys.find((key) => key.provider === provider) ? `Saved ${keys.find((key) => key.provider === provider)?.maskedKey}` : "Using server fallback key"}</p>
+              </div>
+              <KeyRound className="text-[#4F46E5]" />
+            </div>
+            <input
+              type="password"
+              placeholder={`Paste ${provider} API key`}
+              onBlur={(event) => void saveKey(provider, event.target.value.trim())}
+              className="mt-4 h-11 w-full rounded-xl border border-[#DDE5F0] px-3 font-body text-sm font-semibold outline-none focus:border-[#4F46E5]"
+            />
+            <p className="mt-3 font-body text-xs leading-5 text-[#64748B]">
+              The key is stored in this browser and sent only when {provider} is selected in the workspace.
+            </p>
+          </Panel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const staticPageConfig: Record<Exclude<DashboardPage, "overview" | "profile" | "deletedChats" | "likedChats" | "apiKeys">, {
   icon: React.ReactNode;
   chartTitle: string;
   sideTitle: string;
@@ -980,12 +1123,8 @@ const staticPageConfig: Record<Exclude<DashboardPage, "overview" | "profile" | "
   conversations: pageConfig(<MessageSquare />, "Conversation depth", "Workflow coverage", "Conversation queue"),
   inference: pageConfig(<ClipboardList />, "Inference latency", "Trace completeness", "Inference log stream"),
   providers: pageConfig(<Server />, "Provider health", "Model routing", "Provider matrix"),
-  billing: pageConfig(<CreditCard />, "Billing trend", "Payment controls", "Billing entries"),
   security: pageConfig(<ShieldCheck />, "Security posture", "Access policies", "Security checks"),
   sessions: pageConfig(<Workflow />, "Session activity", "Session policy", "Session list"),
-  alerts: pageConfig(<Bell />, "Alert volume", "Notification routes", "Alert inbox"),
-  audit: pageConfig(<Activity />, "Audit events", "Compliance signals", "Audit records"),
-  datasets: pageConfig(<Database />, "Dataset ingestion", "Storage health", "Dataset registry"),
   settings: pageConfig(<Globe2 />, "Configuration drift", "Environment controls", "Config values")
 };
 

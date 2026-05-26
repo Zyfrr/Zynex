@@ -76,6 +76,7 @@ type ChatMainProps = {
   onRegenerate?: () => void;
   onEditPrompt?: (content: string) => void;
   onLikeConversation?: (conversation: { id: string; title: string; preview: string }) => void;
+  onBadResponse?: (conversation: { id: string; content: string }) => void;
   provider: ProviderName;
   model: string;
   onProviderChange: (provider: ProviderName) => void;
@@ -104,6 +105,7 @@ export function ChatMain({
   onRegenerate,
   onEditPrompt,
   onLikeConversation,
+  onBadResponse,
   provider,
   model,
   onProviderChange,
@@ -440,7 +442,7 @@ export function ChatMain({
                           >
                             <ThumbsUp size={14} />
                           </MessageAction>
-                          <MessageAction label="Bad response" onClick={() => saveResponseFeedback("bad", message.content, conversation?.id || message.id)}>
+                          <MessageAction label="Bad response" onClick={() => onBadResponse?.({ id: conversation?.id || message.id, content: message.content })}>
                             <ThumbsDown size={14} />
                           </MessageAction>
                         </>
@@ -859,19 +861,6 @@ async function shareMessage(content: string, title: string) {
     return;
   }
   await navigator.clipboard.writeText(content);
-}
-
-function saveResponseFeedback(type: "bad", content: string, conversationId: string) {
-  const feedback = readResponseFeedback().filter((item) => item.conversationId !== conversationId || item.content !== content);
-  window.localStorage.setItem("zynex-response-feedback", JSON.stringify([{ type, content, conversationId, createdAt: new Date().toISOString() }, ...feedback].slice(0, 100)));
-}
-
-function readResponseFeedback(): Array<{ type: "bad"; content: string; conversationId: string; createdAt: string }> {
-  try {
-    return JSON.parse(window.localStorage.getItem("zynex-response-feedback") || "[]");
-  } catch {
-    return [];
-  }
 }
 
 function exportConversationAsPdf(messages: ChatMainProps["messages"], title: string) {

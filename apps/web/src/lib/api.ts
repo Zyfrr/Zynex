@@ -1,5 +1,9 @@
 const apiBaseUrl = process.env.NEXT_PUBLIC_ZYNEX_API_URL || "http://localhost:4101";
 
+export function getZyNexApiBaseUrl() {
+  return apiBaseUrl;
+}
+
 export class ZyNexApiError extends Error {
   constructor(
     message: string,

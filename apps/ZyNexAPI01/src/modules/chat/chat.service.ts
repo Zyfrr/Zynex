@@ -4,7 +4,7 @@ import { AppError } from "../../errors/AppError";
 import { ErrorCode } from "../../errors/ErrorCodes";
 import { InferenceLogger } from "../../sdk/InferenceLogger";
 import { getLLMClient } from "../../sdk/LLMProviderFactory";
-import { ZyNexProviderName } from "../../sdk/LLMClient";
+import { ZyNexLLMRequest, ZyNexProviderName } from "../../sdk/LLMClient";
 
 const inferenceLogger = new InferenceLogger();
 
@@ -14,6 +14,8 @@ type SendMessageInput = {
   message: string;
   provider: ZyNexProviderName;
   model: string;
+  apiKey?: string;
+  onToken?: (token: string) => void;
 };
 
 export async function sendChatMessage(input: SendMessageInput) {
@@ -40,21 +42,36 @@ export async function sendChatMessage(input: SendMessageInput) {
     .map((message) => ({ role: message.role.toLowerCase() as "system" | "user" | "assistant", content: message.content }));
 
   try {
-    const llmClient = getLLMClient(input.provider);
-    const result = await llmClient.complete({
+    const llmClient = getLLMClient(input.provider, input.apiKey);
+    const request: ZyNexLLMRequest = {
       requestId,
       conversationId: conversation.id,
       provider: input.provider,
       model: input.model,
       messages: [
         {
-          role: "system",
+          role: "system" as const,
           content: "You are ZyNex, a concise AI assistant for an LLM inference logging assessment demo."
         },
         ...contextMessages,
-        { role: "user", content: input.message }
+        { role: "user" as const, content: input.message }
       ]
-    });
+    };
+    let result;
+    if (input.onToken) {
+      let content = "";
+      for await (const token of llmClient.stream(request)) {
+        content += token;
+        input.onToken(token);
+      }
+      result = {
+        content,
+        promptTokens: estimateTokens(request.messages.map((message) => message.content).join(" ")),
+        completionTokens: estimateTokens(content)
+      };
+    } else {
+      result = await llmClient.complete(request);
+    }
 
     const assistantMessage = await prisma.message.create({
       data: {
@@ -113,6 +130,10 @@ export async function sendChatMessage(input: SendMessageInput) {
     });
     throw error;
   }
+}
+
+function estimateTokens(value: string) {
+  return Math.max(1, Math.ceil(value.trim().length / 4));
 }
 
 function deriveTitle(message: string) {
