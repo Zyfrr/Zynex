@@ -38,6 +38,7 @@ type Conversation = {
 
 type Project = { id: string; name: string };
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
+type ChatAttachment = { name: string; type?: string; size: number; textPreview?: string };
 
 const defaultProvider: ProviderName = "Groq";
 const defaultModels: Record<ProviderName, string> = {
@@ -213,7 +214,7 @@ export function ChatWorkspace() {
     });
   }
 
-  async function sendPrompt(overridePrompt?: string) {
+  async function sendPrompt(overridePrompt?: string, attachments: ChatAttachment[] = []) {
     const nextPrompt = (overridePrompt ?? prompt).trim();
     if (!nextPrompt || sending) return;
     if (!activeUser) {
@@ -254,7 +255,7 @@ export function ChatWorkspace() {
       };
       setChatMessages((items) => [...items, optimisticAssistant]);
 
-      const result = await streamChatMessage(conversationId, nextPrompt, provider, model, optimisticMessage);
+      const result = await streamChatMessage(conversationId, nextPrompt, provider, model, optimisticMessage, attachments);
       setChatMessages((items) => [...items.filter((message) => !message.id.startsWith("local-")), result.userMessage, result.assistantMessage]);
       await refreshConversations();
     } catch (error) {
@@ -345,7 +346,7 @@ export function ChatWorkspace() {
           conversation={activeConversation}
           messages={chatMessages}
           sending={sending}
-          onSend={sendPrompt}
+          onSend={(attachments) => void sendPrompt(undefined, attachments || [])}
           onNewConversation={createConversation}
           onCancelConversation={cancelConversation}
           onRegenerate={() => {
@@ -395,12 +396,12 @@ function sortConversations(items: Conversation[]) {
   return [...items].sort((first, second) => Number(Boolean(second.pinned)) - Number(Boolean(first.pinned)));
 }
 
-async function streamChatMessage(conversationId: string, message: string, provider: ProviderName, model: string, optimisticMessage: ChatMessage) {
+async function streamChatMessage(conversationId: string, message: string, provider: ProviderName, model: string, optimisticMessage: ChatMessage, attachments: ChatAttachment[] = []) {
   const response = await fetch(`${getZyNexApiBaseUrl()}/api/v1/chat/ZyNexAPI01ChatConversations/${conversationId}/MessagesStream`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, provider, model, stream: true })
+    body: JSON.stringify({ message, attachments, provider, model, stream: true })
   });
 
   if (!response.ok || !response.body) {

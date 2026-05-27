@@ -25,6 +25,7 @@ chatRouter.post(
       userId,
       conversationId,
       message: body.message,
+      attachments: body.attachments,
       provider: body.provider,
       model: body.model,
       apiKey: headerKey || await getProviderKey(userId, body.provider)
@@ -77,6 +78,7 @@ chatRouter.post(
       userId,
       conversationId,
       message: body.message,
+      attachments: body.attachments,
       provider: body.provider,
       model: body.model,
       apiKey: headerKey || await getProviderKey(userId, body.provider),

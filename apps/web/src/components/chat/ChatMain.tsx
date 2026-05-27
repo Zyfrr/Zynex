@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Clipboard, Download, Eye, FileText, Mail, Menu, Mic, Paperclip, Pencil, RefreshCcw, Search, Send, Share2, Sparkles, Square, Table2, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { Check, Clipboard, Download, Eye, FileText, Mail, Menu, Mic, Paperclip, Pencil, RefreshCcw, Send, Share2, Sparkles, Square, Table2, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { suggestions } from "@/components/chat/chatData";
 
 type ProviderName = "Claude" | "OpenAI" | "Gemini" | "OpenRouter" | "Groq";
+type ChatAttachment = { name: string; type?: string; size: number; textPreview?: string };
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 type SpeechRecognitionResultListLike = {
@@ -70,7 +71,7 @@ type ChatMainProps = {
   } | null;
   messages?: Array<{ id: string; role: "USER" | "ASSISTANT" | "SYSTEM"; content: string; createdAt: string }>;
   sending?: boolean;
-  onSend?: () => void;
+  onSend?: (attachments?: ChatAttachment[]) => void;
   onNewConversation?: () => void;
   onCancelConversation?: () => void;
   onRegenerate?: () => void;
@@ -114,7 +115,7 @@ export function ChatMain({
   const hasMessages = messages.length > 0;
   const conversationCancelled = conversation?.status === "CANCELLED";
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number }>>([]);
+  const [attachedFiles, setAttachedFiles] = useState<ChatAttachment[]>([]);
   const [exportOpen, setExportOpen] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const [voiceState, setVoiceState] = useState<"idle" | "listening" | "analyzing" | "unsupported">("idle");
@@ -516,8 +517,8 @@ export function ChatMain({
               type="file"
               multiple
               className="hidden"
-              onChange={(event) => {
-                const files = Array.from(event.target.files || []).map((file) => ({ name: file.name, size: file.size }));
+              onChange={async (event) => {
+                const files = await Promise.all(Array.from(event.target.files || []).map(readAttachmentPreview));
                 setAttachedFiles((items) => [...items, ...files]);
                 setAttachOpen(false);
                 event.currentTarget.value = "";
@@ -539,45 +540,41 @@ export function ChatMain({
             {(recording || voiceState === "unsupported" || voiceState === "analyzing") && (
               <VoiceRecorderPanel state={voiceState} seconds={voiceSeconds} interim={voiceInterim} />
             )}
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onInput={(event) => setPrompt(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  onSend?.();
-                }
-              }}
-              placeholder="Message ZyNex..."
-              rows={2}
-              disabled={conversationCancelled || sending}
-              className="min-h-[76px] w-full resize-none bg-transparent px-3 py-2 font-body text-sm leading-6 text-[#111827] outline-none placeholder:text-[#8A94A6] sm:min-h-[82px] sm:text-[15px]"
-            />
-            <div className="flex items-center justify-between gap-2 px-1 pt-2">
-              <div className="flex items-center gap-1.5">
-                <IconButton label="Attach files" active={attachOpen} onClick={() => setAttachOpen(!attachOpen)}>
-                  <Paperclip size={18} />
-                </IconButton>
-                <IconButton label="Search context">
-                  <Search size={18} />
-                </IconButton>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <IconButton label={recording ? "Stop voice input" : "Voice input"} active={recording} onClick={toggleVoiceInput}>
-                  {recording ? <StopVoiceIcon /> : <Mic size={18} />}
-                </IconButton>
-                <button
-                  type="button"
-                  disabled={!prompt.trim() || conversationCancelled || sending}
-                  aria-label="Send message"
-                  onClick={onSend}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-[#111827] text-white transition hover:bg-[#242A33] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/45 border-t-white" /> : <Send size={18} />}
-                </button>
-              </div>
+            <div className="flex items-end gap-2 px-1 pt-1">
+              <IconButton label="Attach files" active={attachOpen} onClick={() => setAttachOpen(!attachOpen)}>
+                <Paperclip size={18} />
+              </IconButton>
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onInput={(event) => setPrompt(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    onSend?.(attachedFiles);
+                    setAttachedFiles([]);
+                  }
+                }}
+                placeholder="Message ZyNex..."
+                rows={1}
+                disabled={conversationCancelled || sending}
+                className="max-h-32 min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 font-body text-sm leading-5 text-[#111827] outline-none placeholder:text-[#8A94A6] sm:text-[15px]"
+              />
+              <IconButton label={recording ? "Stop voice input" : "Voice input"} active={recording} onClick={toggleVoiceInput}>
+                {recording ? <StopVoiceIcon /> : <Mic size={18} />}
+              </IconButton>
+              <button
+                type="button"
+                disabled={!prompt.trim() || conversationCancelled || sending}
+                aria-label="Send message"
+                onClick={() => {
+                  onSend?.(attachedFiles);
+                  setAttachedFiles([]);
+                }}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#111827] text-white transition hover:bg-[#242A33] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {sending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/45 border-t-white" /> : <Send size={18} />}
+              </button>
             </div>
           </div>
           <div className="mx-auto mt-3 flex max-w-3xl flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center font-body text-[11px] font-medium text-[#6B7280] sm:gap-x-4 sm:text-[12px]">
@@ -718,9 +715,16 @@ function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (
   const cleanedContent = sanitizeGeneratedContent(content);
   const parts = parseCodeBlocks(cleanedContent);
   const documentLike = isDocumentLike(cleanedContent);
+  const documentSplit = documentLike && parts.length === 1 ? splitDocumentDraft(parts[0].value) : null;
   return (
     <div className="space-y-3 text-left">
-      {parts.map((part, index) => part.type === "code" ? (
+      {documentSplit ? (
+        <>
+          {documentSplit.before && <MarkdownContent content={documentSplit.before} />}
+          <EditableDocument content={documentSplit.document} title={documentSplit.title} onCopy={onCopy} copiedId={copiedId} />
+          {documentSplit.after && <MarkdownContent content={documentSplit.after} />}
+        </>
+      ) : parts.map((part, index) => part.type === "code" ? (
         <CodeBlock key={index} id={`code-${index}-${part.language}`} language={part.language} code={part.value} onCopy={onCopy} copiedId={copiedId} />
       ) : documentLike && parts.length === 1 ? (
         <EditableDocument key={index} content={part.value} title="Editable response" onCopy={onCopy} copiedId={copiedId} />
@@ -893,9 +897,12 @@ function parseCodeBlocks(content: string) {
 
 function sanitizeGeneratedContent(content: string) {
   return normalizeDocumentText(content)
+    .replace(/^\s*#{1,6}\s*$/gm, "")
+    .replace(/^\s*#{1,6}\s*(?=\n|$)/gm, "")
     .replace(/^\s*[=]{3,}\s*/gm, "")
-    .replace(/(^|\n)\s*\+\s+/g, "$1- ")
-    .replace(/\s+#(?=\s|$)/g, "")
+    .replace(/(^|\n)\s*[+]\s+/g, "$1- ")
+    .replace(/\s+#(?=\s|$|\n)/g, "")
+    .replace(/(^|\n)(Subject:[^\n]+)\s+(Dear\b)/gi, "$1$2\n\n$3")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -1029,7 +1036,48 @@ function isDocumentLike(content: string) {
 
 function isDocumentLikeRaw(content: string) {
   const normalized = content.toLowerCase();
-  return /\b(dear|sincerely|regards|subject:|leave of absence|scorecard|rubric|section\s+\d|template|draft)\b/.test(normalized) || extractMarkdownTables([{ id: "x", role: "ASSISTANT", content, createdAt: "" }]).length > 0;
+  return /\b(dear|sincerely|regards|subject:|leave of absence|scorecard|rubric|section\s+\d|template|draft|referral email|attachments:)\b/.test(normalized) || extractMarkdownTables([{ id: "x", role: "ASSISTANT", content, createdAt: "" }]).length > 0;
+}
+
+function splitDocumentDraft(content: string) {
+  const lines = sanitizeGeneratedContent(content).split(/\r?\n/);
+  const startIndex = lines.findIndex((line) => /^(subject:|dear\b|to:|from:|date\b|\[[^\]]*date[^\]]*\]|the principal\b|respected\b|referral email\b|attachments:)/i.test(line.trim()));
+  if (startIndex <= 0) {
+    return { before: "", document: lines.join("\n").trim(), after: "", title: inferDocumentTitle(content) };
+  }
+
+  const before = lines.slice(0, startIndex).join("\n").trim();
+  const document = lines.slice(startIndex).join("\n").trim();
+  return { before, document, after: "", title: inferDocumentTitle(document) };
+}
+
+function inferDocumentTitle(content: string) {
+  const normalized = content.toLowerCase();
+  if (normalized.includes("subject:") || normalized.includes("dear ")) return "Email draft";
+  if (normalized.includes("scorecard")) return "Scorecard draft";
+  if (normalized.includes("leave")) return "Leave letter";
+  return "Editable draft";
+}
+
+async function readAttachmentPreview(file: File): Promise<ChatAttachment> {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  const readable = ["txt", "md", "csv", "json", "html", "xml", "log", "pdf"].includes(extension) || file.type.startsWith("text/");
+  if (!readable) return { name: file.name, type: file.type, size: file.size };
+
+  const raw = await file.text().catch(() => "");
+  const textPreview = extension === "pdf" ? extractPdfText(raw) : raw;
+  return {
+    name: file.name,
+    type: file.type || extension,
+    size: file.size,
+    textPreview: textPreview.replace(/\s+/g, " ").trim().slice(0, 6000)
+  };
+}
+
+function extractPdfText(raw: string) {
+  const matches = raw.match(/\(([^()]{3,})\)/g) || [];
+  const extracted = matches.map((value) => value.slice(1, -1).replace(/\\([()\\])/g, "$1")).join(" ");
+  return extracted || raw.replace(/[^\x20-\x7E]+/g, " ");
 }
 
 function exportDocumentTextAsWord(content: string, title: string) {

@@ -12,6 +12,7 @@ type SendMessageInput = {
   userId: string;
   conversationId: string;
   message: string;
+  attachments?: Array<{ name: string; type?: string; size?: number; textPreview?: string }>;
   provider: ZyNexProviderName;
   model: string;
   apiKey?: string;
@@ -40,6 +41,8 @@ export async function sendChatMessage(input: SendMessageInput) {
   const contextMessages = [...conversation.messages]
     .reverse()
     .map((message) => ({ role: message.role.toLowerCase() as "system" | "user" | "assistant", content: message.content }));
+  const attachmentContext = buildAttachmentContext(input.attachments || []);
+  const userContent = attachmentContext ? `${input.message}\n\n${attachmentContext}` : input.message;
 
   try {
     const llmClient = getLLMClient(input.provider, input.apiKey);
@@ -55,6 +58,7 @@ export async function sendChatMessage(input: SendMessageInput) {
             "You are ZyNex, a concise AI assistant for an LLM inference logging assessment demo.",
             "Format every response clearly with Markdown. Use headings, short paragraphs, bullet lists, and tables when they improve readability.",
             "When the user asks for a letter, email, notice, policy, report, scorecard, or template, return a polished editable document with logical line breaks and placeholders on separate lines.",
+            "For emails, put a Subject line and the email body only in the draft. Keep any brief explanation outside the draft.",
             "For letters, include a short title, date, recipient block, greeting, body paragraphs, closing, and signature block.",
             "For recipes, use a title, short intro, Ingredients, Steps, and Tips sections.",
             "For scorecards and rubrics, prefer Markdown tables with clear columns.",
@@ -62,7 +66,7 @@ export async function sendChatMessage(input: SendMessageInput) {
           ].join(" ")
         },
         ...contextMessages,
-        { role: "user" as const, content: input.message }
+        { role: "user" as const, content: userContent }
       ]
     };
     let result;
@@ -142,6 +146,19 @@ export async function sendChatMessage(input: SendMessageInput) {
 
 function estimateTokens(value: string) {
   return Math.max(1, Math.ceil(value.trim().length / 4));
+}
+
+function buildAttachmentContext(attachments: Array<{ name: string; type?: string; size?: number; textPreview?: string }>) {
+  if (!attachments.length) return "";
+  return [
+    "Attached document context:",
+    ...attachments.map((attachment, index) => [
+      `Attachment ${index + 1}: ${attachment.name}`,
+      attachment.type ? `Type: ${attachment.type}` : "",
+      attachment.size ? `Size: ${attachment.size} bytes` : "",
+      attachment.textPreview ? `Extracted text:\n${attachment.textPreview}` : "Extracted text unavailable. Use the filename and user prompt only."
+    ].filter(Boolean).join("\n"))
+  ].join("\n\n");
 }
 
 function deriveTitle(message: string) {
