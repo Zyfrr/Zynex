@@ -416,8 +416,9 @@ function OverviewPage({ analytics, loading }: { analytics: AnalyticsOverview | n
 }
 
 function ProfilePage({ onEditRoute }: { onEditRoute: () => void }) {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [user, setUser] = useState<ApiUser | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [changeModal, setChangeModal] = useState<null | "email" | "phone">(null);
@@ -429,11 +430,11 @@ function ProfilePage({ onEditRoute }: { onEditRoute: () => void }) {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
   const profile = useMemo(() => {
-    const fallbackName = session?.user?.name || "ZyNex Operator";
-    const [firstName = "ZyNex", ...rest] = fallbackName.split(/\s+/);
+    const fallbackName = session?.user?.name || "";
+    const [firstName = "", ...rest] = fallbackName.split(/\s+/).filter(Boolean);
     return {
       firstName: user?.profile?.firstName || firstName,
-      lastName: user?.profile?.lastName || rest.join(" ") || "User",
+      lastName: user?.profile?.lastName || rest.join(" "),
       email: user?.email || session?.user?.email || "",
       phoneCountryCode: user?.phoneCountryCode || "+91",
       phoneNumber: user?.phoneNumber || "",
@@ -446,10 +447,12 @@ function ProfilePage({ onEditRoute }: { onEditRoute: () => void }) {
   const [form, setForm] = useState(profile);
 
   useEffect(() => {
+    setProfileLoading(true);
     zynexApi<ApiUser | null>("/api/v1/auth/ZyNexAPI01AuthMe")
       .then((nextUser) => setUser(nextUser))
-      .catch(() => setUser(null));
-  }, []);
+      .catch(() => setUser(null))
+      .finally(() => setProfileLoading(false));
+  }, [session?.user?.email]);
 
   useEffect(() => {
     setForm(profile);
@@ -549,6 +552,20 @@ function ProfilePage({ onEditRoute }: { onEditRoute: () => void }) {
     } catch (error) {
       showDashboardError(error);
     }
+  }
+
+  if (profileLoading && sessionStatus === "loading" && !user) {
+    return (
+      <Panel>
+        <div className="space-y-4">
+          <div className="h-4 w-28 animate-pulse rounded-full bg-[#E8EEF7]" />
+          <div className="h-8 w-72 max-w-full animate-pulse rounded-full bg-[#E8EEF7]" />
+          <div className="grid gap-4 md:grid-cols-2">
+            {Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-12 animate-pulse rounded-2xl bg-[#F3F5FA]" />)}
+          </div>
+        </div>
+      </Panel>
+    );
   }
 
   return (

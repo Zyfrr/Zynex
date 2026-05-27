@@ -24,6 +24,48 @@ services:
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - zynex-clickhouse:/var/lib/clickhouse
 
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.api
+      args:
+        DATABASE_URL: postgresql://zynex:zynex@postgres:5432/zynex
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgresql://zynex:zynex@postgres:5432/zynex
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: zynex-local-jwt-secret
+      ZYNEX_COOKIE_DOMAIN: ""
+      ZYNEX_COOKIE_SECURE: "false"
+      WEB_ORIGIN: http://localhost:3000
+      ZYNEX_API_PORT: 4101
+      ZYNEX_DEFAULT_PROVIDER: Groq
+      ZYNEX_DEFAULT_MODEL: llama-3.3-70b-versatile
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "4101:4101"
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_ZYNEX_API_URL: http://localhost:4101
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: zynex-local-nextauth-secret
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_ZYNEX_API_URL: http://localhost:4101
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: zynex-local-nextauth-secret
+    ports:
+      - "3000:3000"
+
 volumes:
   zynex-postgres:
   zynex-clickhouse:

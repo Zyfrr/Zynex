@@ -9,6 +9,7 @@ const envSchema = z.object({
   NEXTAUTH_SECRET: z.string().default("local-dev-secret"),
   ZYNEX_JWT_SECRET: z.string().default("local-api-jwt-secret"),
   ZYNEX_COOKIE_DOMAIN: z.string().optional(),
+  ZYNEX_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   SPACESHIP_SMTP_HOST: z.string().optional(),
   SPACESHIP_SMTP_PORT: z.coerce.number().default(587),
   SPACESHIP_SMTP_USER: z.string().default("support@zyfrr.com"),

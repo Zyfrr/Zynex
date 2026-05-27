@@ -18,14 +18,19 @@ function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
 }
 
-function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
-  const cookieBase = {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+function authCookieBase(httpOnly = false) {
+  const secure = env.ZYNEX_COOKIE_SECURE ? env.ZYNEX_COOKIE_SECURE === "true" : process.env.NODE_ENV === "production" || Boolean(env.ZYNEX_COOKIE_DOMAIN);
+  return {
+    httpOnly,
+    sameSite: secure ? "none" as const : "lax" as const,
+    secure,
     domain: env.ZYNEX_COOKIE_DOMAIN || undefined,
     path: "/"
   };
+}
+
+function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+  const cookieBase = authCookieBase(true);
 
   res.cookie(ACCESS_COOKIE, accessToken, { ...cookieBase, maxAge: 72 * 60 * 60 * 1000 });
   res.cookie(REFRESH_COOKIE, refreshToken, { ...cookieBase, maxAge: 72 * 60 * 60 * 1000 });
@@ -401,8 +406,8 @@ export class AuthService {
   }
 
   clearSessionCookies(res: Response) {
-    res.clearCookie(ACCESS_COOKIE, { path: "/" });
-    res.clearCookie(REFRESH_COOKIE, { path: "/" });
+    res.clearCookie(ACCESS_COOKIE, authCookieBase());
+    res.clearCookie(REFRESH_COOKIE, authCookieBase());
   }
 
   async getCurrentUser(userId?: string) {

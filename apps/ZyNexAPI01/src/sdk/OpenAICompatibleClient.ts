@@ -28,7 +28,7 @@ export class OpenAICompatibleClient implements LLMClient {
     const result = await this.complete(request);
     const parts = result.content.match(/.{1,32}(\s|$)/g) || [result.content];
     for (const part of parts) {
-      yield part.trimEnd();
+      yield part;
     }
   }
 

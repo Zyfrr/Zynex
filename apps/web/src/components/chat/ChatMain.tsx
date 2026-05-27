@@ -534,6 +534,7 @@ export function ChatMain({
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
+              onInput={(event) => setPrompt(event.currentTarget.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -707,13 +708,98 @@ function ExportAction({ icon, label, subtext, onClick }: { icon: React.ReactNode
 
 function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
   const parts = parseCodeBlocks(content);
+  const documentLike = isDocumentLike(content);
   return (
     <div className="space-y-3 text-left">
       {parts.map((part, index) => part.type === "code" ? (
         <CodeBlock key={index} id={`code-${index}-${part.language}`} language={part.language} code={part.value} onCopy={onCopy} copiedId={copiedId} />
+      ) : documentLike && parts.length === 1 ? (
+        <EditableDocument key={index} content={part.value} title="Editable response" onCopy={onCopy} copiedId={copiedId} />
       ) : (
-        <p key={index} className="whitespace-pre-wrap">{part.value}</p>
+        <MarkdownContent key={index} content={part.value} />
       ))}
+    </div>
+  );
+}
+
+function EditableDocument({ content, title, onCopy, copiedId }: { content: string; title: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(content);
+  const id = `doc-${safeFileName(content.slice(0, 32))}`;
+
+  useEffect(() => {
+    setDraft(content);
+  }, [content]);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#DDE5F0] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8EEF7] bg-[#F8FAFC] px-3 py-2">
+        <span className="font-body text-xs font-bold uppercase text-[#64748B]">{title}</span>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setEditing((value) => !value)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 font-body text-xs font-semibold text-[#4C596C] hover:bg-white">
+            <Pencil size={13} />
+            {editing ? "Preview" : "Edit"}
+          </button>
+          <button type="button" onClick={() => onCopy(id, draft)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 font-body text-xs font-semibold text-[#4C596C] hover:bg-white">
+            {copiedId === id ? <Check size={13} /> : <Clipboard size={13} />}
+            {copiedId === id ? "Copied" : "Copy"}
+          </button>
+          <button type="button" onClick={() => exportDocumentTextAsWord(draft, title)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 font-body text-xs font-semibold text-[#4C596C] hover:bg-white">
+            <FileText size={13} />
+            DOC
+          </button>
+          <button type="button" onClick={() => exportDocumentTextAsPdf(draft, title)} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 font-body text-xs font-semibold text-[#4C596C] hover:bg-white">
+            <Download size={13} />
+            PDF
+          </button>
+        </div>
+      </div>
+      {editing ? (
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} className="block min-h-72 w-full resize-y bg-white p-4 font-body text-sm leading-7 text-[#111827] outline-none" />
+      ) : (
+        <div className="p-4 font-body text-sm leading-7 text-[#111827]">
+          <MarkdownContent content={draft} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const blocks = parseMarkdownBlocks(content);
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          return <h3 key={index} className="font-display text-lg font-semibold leading-7 text-[#111827]">{renderInlineMarkdown(block.value)}</h3>;
+        }
+        if (block.type === "list") {
+          return block.ordered ? (
+            <ol key={index} className="list-decimal space-y-1 pl-5">{block.items.map((item, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(item)}</li>)}</ol>
+          ) : (
+            <ul key={index} className="list-disc space-y-1 pl-5">{block.items.map((item, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(item)}</li>)}</ul>
+          );
+        }
+        if (block.type === "table") {
+          return (
+            <div key={index} className="overflow-x-auto rounded-xl border border-[#E8EEF7]">
+              <table className="min-w-full border-collapse text-left font-body text-sm">
+                <thead className="bg-[#F8FAFC] text-xs uppercase text-[#64748B]">
+                  <tr>{block.headers.map((header, cellIndex) => <th key={cellIndex} className="border-b border-[#E8EEF7] px-3 py-2 font-bold">{renderInlineMarkdown(header)}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="border-t border-[#EEF2F7]">
+                      {row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2 align-top">{renderInlineMarkdown(cell)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return <p key={index} className="whitespace-pre-wrap">{renderInlineMarkdown(block.value)}</p>;
+      })}
     </div>
   );
 }
@@ -794,6 +880,133 @@ function parseCodeBlocks(content: string) {
   }
 
   return parts.filter((part) => part.value);
+}
+
+type MarkdownBlock =
+  | { type: "heading"; value: string }
+  | { type: "paragraph"; value: string }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function parseMarkdownBlocks(content: string): MarkdownBlock[] {
+  const normalized = normalizeGeneratedText(content);
+  const lines = normalized.split(/\r?\n/);
+  const blocks: MarkdownBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownTableRow(line) && lines[index + 1] && isMarkdownSeparatorRow(lines[index + 1])) {
+      const headers = splitMarkdownTableRow(line);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && isMarkdownTableRow(lines[index])) {
+        rows.push(splitMarkdownTableRow(lines[index]));
+        index += 1;
+      }
+      blocks.push({ type: "table", headers, rows });
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    const boldHeading = line.match(/^\*\*([^*]+)\*\*:?$/);
+    if (heading || boldHeading) {
+      blocks.push({ type: "heading", value: stripMarkdownDecorators((heading?.[2] || boldHeading?.[1] || line).trim()) });
+      index += 1;
+      continue;
+    }
+
+    if (/^(\d+\.\s+|[-*]\s+)/.test(line)) {
+      const ordered = /^\d+\.\s+/.test(line);
+      const items: string[] = [];
+      while (index < lines.length) {
+        const itemLine = lines[index].trim();
+        const itemMatch = itemLine.match(ordered ? /^\d+\.\s+(.+)$/ : /^[-*]\s+(.+)$/);
+        if (!itemMatch) break;
+        items.push(itemMatch[1].trim());
+        index += 1;
+      }
+      blocks.push({ type: "list", ordered, items });
+      continue;
+    }
+
+    const paragraph: string[] = [line];
+    index += 1;
+    while (index < lines.length) {
+      const nextLine = lines[index].trim();
+      if (!nextLine || /^(#{1,4})\s+/.test(nextLine) || /^\*\*([^*]+)\*\*:?$/.test(nextLine) || /^(\d+\.\s+|[-*]\s+)/.test(nextLine)) break;
+      if (isMarkdownTableRow(nextLine) && lines[index + 1] && isMarkdownSeparatorRow(lines[index + 1])) break;
+      paragraph.push(nextLine);
+      index += 1;
+    }
+    blocks.push({ type: "paragraph", value: paragraph.join(" ") });
+  }
+
+  return blocks.length ? blocks : [{ type: "paragraph", value: normalized }];
+}
+
+function normalizeGeneratedText(content: string) {
+  return content
+    .replace(/\*\*\s*\*\*/g, "\n")
+    .replace(/(\S)(#{1,4}\s+)/g, "$1\n$2")
+    .replace(/(\S)(\*\*[^*]+:\*\*)/g, "$1\n$2")
+    .replace(/(\S)([-*]\s+[A-Z0-9])/g, "$1\n$2")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function renderInlineMarkdown(value: string) {
+  const nodes: React.ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(value))) {
+    if (match.index > lastIndex) nodes.push(value.slice(lastIndex, match.index));
+    const token = match[0];
+    if (token.startsWith("**")) {
+      nodes.push(<strong key={`${token}-${match.index}`}>{token.slice(2, -2)}</strong>);
+    } else {
+      nodes.push(<code key={`${token}-${match.index}`} className="rounded bg-[#F3F5FA] px-1 py-0.5 font-mono text-[0.9em] text-[#334155]">{token.slice(1, -1)}</code>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < value.length) nodes.push(value.slice(lastIndex));
+  return nodes;
+}
+
+function stripMarkdownDecorators(value: string) {
+  return value.replace(/^\*+|\*+$/g, "").trim();
+}
+
+function isMarkdownSeparatorRow(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isDocumentLike(content: string) {
+  const normalized = content.toLowerCase();
+  return /\b(dear|sincerely|regards|subject:|leave of absence|scorecard|rubric|section\s+\d|template|draft)\b/.test(normalized) || extractMarkdownTables([{ id: "x", role: "ASSISTANT", content, createdAt: "" }]).length > 0;
+}
+
+function exportDocumentTextAsWord(content: string, title: string) {
+  const message = { id: "document", role: "ASSISTANT" as const, content, createdAt: new Date().toISOString() };
+  downloadBlob(`${safeFileName(title)}.doc`, new Blob([buildConversationHtml([message], title)], { type: "application/msword;charset=utf-8" }));
+}
+
+function exportDocumentTextAsPdf(content: string, title: string) {
+  const message = { id: "document", role: "ASSISTANT" as const, content, createdAt: new Date().toISOString() };
+  const popup = window.open("", "_blank", "width=900,height=700");
+  if (!popup) return;
+  popup.document.write(buildConversationHtml([message], title));
+  popup.document.close();
+  popup.focus();
+  window.setTimeout(() => popup.print(), 250);
 }
 
 function highlightCode(code: string, language: string) {

@@ -49,7 +49,7 @@ const defaultModels: Record<ProviderName, string> = {
 };
 
 export function ChatWorkspace() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [temporaryChat, setTemporaryChat] = useState(false);
@@ -217,6 +217,10 @@ export function ChatWorkspace() {
     const nextPrompt = (overridePrompt ?? prompt).trim();
     if (!nextPrompt || sending) return;
     if (!activeUser) {
+      if (sessionStatus === "loading") {
+        toast.message("Restoring your session. Please try again in a moment.");
+        return;
+      }
       openAuth("login");
       return;
     }
@@ -307,7 +311,7 @@ export function ChatWorkspace() {
           activeMenu={activeMenu}
           setActiveMenu={setActiveMenu}
           user={activeUser}
-          authenticated={Boolean(activeUser)}
+          authenticated={Boolean(activeUser) || sessionStatus === "loading"}
           onLoginClick={() => openAuth("login")}
           conversations={conversations}
           projects={projects}
@@ -335,7 +339,7 @@ export function ChatWorkspace() {
           prompt={prompt}
           setPrompt={setPrompt}
           user={activeUser}
-          authenticated={Boolean(activeUser)}
+          authenticated={Boolean(activeUser) || sessionStatus === "loading"}
           onLoginClick={() => openAuth("login")}
           onSignupClick={() => openAuth("signup")}
           conversation={activeConversation}
