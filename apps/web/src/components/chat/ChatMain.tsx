@@ -121,6 +121,8 @@ export function ChatMain({
   const [voiceInterim, setVoiceInterim] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const recordingActiveRef = useRef(false);
   const promptRef = useRef(prompt);
@@ -153,6 +155,11 @@ export function ChatMain({
       recognitionRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!hasMessages) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [hasMessages, messages, sending]);
 
   async function copyText(id: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -394,7 +401,7 @@ export function ChatMain({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 ${hasMessages ? "" : "flex items-center justify-center"}`}>
+        <div ref={scrollAreaRef} className={`min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 ${hasMessages ? "" : "flex items-center justify-center"}`}>
           {hasMessages ? (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
               {messages.map((message, messageIndex) => (
@@ -466,6 +473,7 @@ export function ChatMain({
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
           ) : (
             <div className="w-full max-w-3xl text-center">
@@ -707,8 +715,9 @@ function ExportAction({ icon, label, subtext, onClick }: { icon: React.ReactNode
 }
 
 function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
-  const parts = parseCodeBlocks(content);
-  const documentLike = isDocumentLike(content);
+  const cleanedContent = sanitizeGeneratedContent(content);
+  const parts = parseCodeBlocks(cleanedContent);
+  const documentLike = isDocumentLike(cleanedContent);
   return (
     <div className="space-y-3 text-left">
       {parts.map((part, index) => part.type === "code" ? (
@@ -724,11 +733,11 @@ function RichMessage({ content, onCopy, copiedId }: { content: string; onCopy: (
 
 function EditableDocument({ content, title, onCopy, copiedId }: { content: string; title: string; onCopy: (id: string, value: string) => void; copiedId: string | null }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(content);
+  const [draft, setDraft] = useState(sanitizeGeneratedContent(content));
   const id = `doc-${safeFileName(content.slice(0, 32))}`;
 
   useEffect(() => {
-    setDraft(content);
+    setDraft(sanitizeGeneratedContent(content));
   }, [content]);
 
   return (
@@ -882,6 +891,16 @@ function parseCodeBlocks(content: string) {
   return parts.filter((part) => part.value);
 }
 
+function sanitizeGeneratedContent(content: string) {
+  return normalizeDocumentText(content)
+    .replace(/^\s*[=]{3,}\s*/gm, "")
+    .replace(/(^|\n)\s*\+\s+/g, "$1- ")
+    .replace(/\s+#(?=\s|$)/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 type MarkdownBlock =
   | { type: "heading"; value: string }
   | { type: "paragraph"; value: string }
@@ -951,13 +970,28 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
 }
 
 function normalizeGeneratedText(content: string) {
-  return content
+  return sanitizeGeneratedContent(content)
     .replace(/\*\*\s*\*\*/g, "\n")
     .replace(/(\S)(#{1,4}\s+)/g, "$1\n$2")
     .replace(/(\S)(\*\*[^*]+:\*\*)/g, "$1\n$2")
     .replace(/(\S)([-*]\s+[A-Z0-9])/g, "$1\n$2")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
+}
+
+function normalizeDocumentText(content: string) {
+  if (!isDocumentLikeRaw(content)) return content;
+  return content
+    .replace(/(Here's\s+a\s+sample[^:\n]*:)\s*/i, "$1\n\n")
+    .replace(/(\[[^\]]+\])(?=(The Principal|Dear|Respected|To\b|From\b))/gi, "$1\n")
+    .replace(/(The Principal,?)(?=\S)/gi, "$1\n")
+    .replace(/(School,?[^.\n]*\.)(?=\S)/gi, "$1\n\n")
+    .replace(/(Dear\s+[^,\n]+,)(?=\S)/gi, "$1\n\n")
+    .replace(/(Respected\s+Sir\/Madam,?)(?=\S)/gi, "$1\n\n")
+    .replace(/(\.)(?=(I am writing|The reason|I will|If there|Thank you|Sincerely|Class:|Note:))/g, "$1\n\n")
+    .replace(/(Sincerely,)(?=\S)/gi, "$1\n")
+    .replace(/(Class:\s*\[[^\]]+\])(?=\S)/gi, "$1\n")
+    .replace(/(Note:)(?=\S)/gi, "$1 ");
 }
 
 function renderInlineMarkdown(value: string) {
@@ -990,6 +1024,10 @@ function isMarkdownSeparatorRow(line: string) {
 }
 
 function isDocumentLike(content: string) {
+  return isDocumentLikeRaw(content);
+}
+
+function isDocumentLikeRaw(content: string) {
   const normalized = content.toLowerCase();
   return /\b(dear|sincerely|regards|subject:|leave of absence|scorecard|rubric|section\s+\d|template|draft)\b/.test(normalized) || extractMarkdownTables([{ id: "x", role: "ASSISTANT", content, createdAt: "" }]).length > 0;
 }
