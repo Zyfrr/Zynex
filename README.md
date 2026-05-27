@@ -2,6 +2,10 @@
 
 ZyNex is a Next.js + TypeScript monorepo for an AI roleplay chatbot with LLM inference logging, async ingestion, and observability dashboards.
 
+Live demo: https://zynex.zyfrr.com
+
+Kubernetes branch note: this branch contains the Docker and Helm work used to validate ZyNex on Docker Desktop Kubernetes. The same chart is ready for a self-hosted k3s/VPS deployment when a production Kubernetes host is available.
+
 ## Apps
 
 - `apps/web`: Next.js 14 frontend using the ZyNex premium SaaS design system.
@@ -79,6 +83,21 @@ ZyNex is split into three layers:
 - LLM wrapper SDK: provider clients for Groq, OpenRouter, OpenAI-compatible APIs, and a mock fallback. Each request captures model, provider, latency, token counts, request status, request ID, conversation ID, and input/output previews.
 - Ingestion/API service: Express routes validate auth, conversation access, chat messages, analytics, and ingestion payloads, then persist normalized records through Prisma.
 
+```mermaid
+flowchart LR
+  User["User Browser"] --> Web["Next.js Workspace"]
+  Web --> API["ZyNexAPI01 Express API"]
+  API --> Auth["Auth, Projects, Conversations"]
+  API --> Wrapper["LLM Wrapper SDK"]
+  Wrapper --> Groq["Groq"]
+  Wrapper --> OpenRouter["OpenRouter"]
+  Wrapper --> Mock["Mock Fallback"]
+  API --> DB["PostgreSQL via Prisma"]
+  API --> Logs["Inference Logger"]
+  Logs --> DB
+  API --> Dashboard["Analytics + Dashboard APIs"]
+```
+
 ## Ingestion Flow
 
 1. The user sends a message from the workspace.
@@ -133,7 +152,14 @@ The current implementation is production-shaped but still compact. For higher sc
 
 ## Deployment
 
-Recommended free-friendly deployment:
+Current public demo deployment:
+
+- Web/API demo: https://zynex.zyfrr.com
+- Production hosting is kept outside Kubernetes for always-available review.
+- Kubernetes support is included through Dockerfiles and `infra/k8s` Helm chart.
+- Local Kubernetes validation was completed with Docker Desktop Kubernetes, `zynex-web`, `zynex-api`, Redis, auth cookies, OTP console delivery, conversation list, projects, and streaming chat SSE.
+
+Free-friendly deployment option:
 
 - Neon PostgreSQL free plan for the database.
 - Render free web service for `apps/ZyNexAPI01`.
@@ -143,6 +169,8 @@ Recommended free-friendly deployment:
 Guide: `docs/deployment/free-neon-render-cicd.md`
 
 AWS ECS Express Mode notes are kept in `docs/deployment/aws-backend-cicd.md` for a later production upgrade path.
+
+Kubernetes deployment guide: `docs/deployment/kubernetes.md`
 
 Architecture notes: `docs/ARCHITECTURE.md`
 

@@ -7,3 +7,4 @@ dist
 .env.*.local
 coverage
 *.log
+infra/k8s/values.prod.yaml

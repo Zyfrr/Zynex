@@ -4,6 +4,14 @@
 
 Submit the GitHub repository containing this monorepo.
 
+Suggested branch for Kubernetes review:
+
+```txt
+k8s-local-setup
+```
+
+This branch contains the Kubernetes Helm chart, Dockerfile updates, and documentation for local Kubernetes validation.
+
 ## Demo Routes
 
 - Workspace: `/workspace`
@@ -36,6 +44,22 @@ pnpm exec prisma generate
 pnpm -r --filter ./apps/* run build
 ```
 
+Kubernetes validation completed on Docker Desktop Kubernetes:
+
+- `zynex-web` pod running and reachable through `kubectl port-forward`
+- `zynex-api` pod running and health check passing
+- Redis StatefulSet running
+- Login OTP delivered through console mode
+- Auth cookies set correctly for `localhost`
+- Conversations and projects loaded from the API
+- Chat endpoint reached successfully through Kubernetes:
+
+```txt
+POST /api/v1/chat/ZyNexAPI01ChatConversations/:id/MessagesStream
+Status: 200
+Content-Type: text/event-stream
+```
+
 ## One-Command Local Stack
 
 ```bash
@@ -55,3 +79,9 @@ Send to `work@ollive.ai`:
 - Architecture notes link: `docs/ARCHITECTURE.md`
 - Demo link or Loom video
 - Optional screenshots from the workspace and dashboard
+
+Suggested Kubernetes note:
+
+```txt
+The live demo is hosted on the public ZyNex deployment for stable review. Kubernetes support is included through Dockerfiles and a Helm chart under infra/k8s, and the deployment was validated locally on Docker Desktop Kubernetes. The same chart can be deployed to self-hosted k3s by switching kubeconfig, setting production secrets, and enabling ingress/TLS.
+```

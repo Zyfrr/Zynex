@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zynex-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "zynex.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.api.env.NODE_ENV | quote }}
+  ZYNEX_API_PORT: {{ .Values.api.env.ZYNEX_API_PORT | quote }}
+  WEB_ORIGIN: {{ .Values.api.env.WEB_ORIGIN | quote }}
+  REDIS_URL: {{ .Values.api.env.REDIS_URL | quote }}
+  CLICKHOUSE_URL: {{ .Values.api.env.CLICKHOUSE_URL | quote }}
+  ZYNEX_COOKIE_DOMAIN: {{ .Values.api.env.ZYNEX_COOKIE_DOMAIN | quote }}
+  ZYNEX_COOKIE_SECURE: {{ .Values.api.env.ZYNEX_COOKIE_SECURE | quote }}
+  ZYNEX_DEFAULT_PROVIDER: {{ .Values.api.env.ZYNEX_DEFAULT_PROVIDER | quote }}
+  ZYNEX_DEFAULT_MODEL: {{ .Values.api.env.ZYNEX_DEFAULT_MODEL | quote }}
+  NEXT_PUBLIC_ZYNEX_API_URL: {{ .Values.web.env.NEXT_PUBLIC_ZYNEX_API_URL | quote }}
+  NEXTAUTH_URL: {{ .Values.web.env.NEXTAUTH_URL | quote }}
