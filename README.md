@@ -45,7 +45,7 @@ ZyNex implements the required product as a practical monorepo:
 ZyNex has two deployment stories, both documented honestly:
 
 - Public demo: https://zynex.zyfrr.com
-- Kubernetes support: implemented through Dockerfiles and `infra/k8s` Helm chart.
+- Kubernetes support: implemented on the `k8s-local-setup` branch through Dockerfiles and the `infra/k8s` Helm chart.
 - Local Kubernetes validation: completed on Docker Desktop Kubernetes using `zynex-web`, `zynex-api`, Redis, auth cookies, console OTP delivery, conversations/projects API calls, and streaming chat SSE.
 
 The public demo is kept outside Kubernetes so reviewers have an always-available URL. The Kubernetes chart is ready for a self-hosted k3s/VPS deployment when a production server is available.
@@ -57,7 +57,7 @@ The public demo is kept outside Kubernetes so reviewers have an always-available
 - `packages/shared`: shared constants and types.
 - `prisma`: PostgreSQL schema and generated Prisma client.
 - `infra/docker-compose.yml`: one-command local supporting stack.
-- `infra/k8s`: Helm chart for Kubernetes deployment.
+- `infra/k8s`: Helm chart for Kubernetes deployment on the `k8s-local-setup` branch.
 - `docs/ARCHITECTURE.md`: detailed architecture notes and diagrams.
 - `docs/SUBMISSION.md`: assessment demo checklist and submission notes.
 - `docs/deployment`: deployment guides.
@@ -332,6 +332,6 @@ This design keeps chat history stable while allowing inference analytics to scal
 
 - Architecture: `docs/ARCHITECTURE.md`
 - Submission notes: `docs/SUBMISSION.md`
-- Kubernetes guide: `docs/deployment/kubernetes.md`
+- Kubernetes guide: `docs/deployment/kubernetes.md` on the `k8s-local-setup` branch.
 - Free-friendly deployment guide: `docs/deployment/free-neon-render-cicd.md`
 - AWS notes: `docs/deployment/aws-backend-cicd.md`

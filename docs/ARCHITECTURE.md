@@ -175,7 +175,7 @@ This is the URL reviewers can use without needing our laptop or a temporary tunn
 
 ### Kubernetes Support
 
-The Kubernetes implementation is stored under `infra/k8s` and deploys:
+The Kubernetes implementation is stored under `infra/k8s` on the `k8s-local-setup` branch and deploys:
 
 - `zynex-web` Deployment and Service.
 - `zynex-api` Deployment and Service.
